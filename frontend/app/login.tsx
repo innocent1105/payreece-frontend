@@ -2,321 +2,92 @@ import { BASE_URL } from '@/constants/api';
 import { saveToken } from '@/components/auth/auth';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
-} from 'react-native';
-const ACTIVE_COLOR = '#2A2A68';
-const BORDER_COLOR = '#B0C4DE';
-
-interface CustomInputProps {
-    iconName: keyof typeof Ionicons.glyphMap;
-    placeholder: string;
-    value: string;
-    onChangeText: (text: string) => void;
-    secureTextEntry?: boolean;
-    keyboardType?: 'default' | 'numeric' | 'phone-pad';
-    maxLength?: number;
-}
-
-const CustomInput: React.FC<CustomInputProps> = ({ 
-    iconName, 
-    placeholder, 
-    value, 
-    onChangeText, 
-    secureTextEntry = false, 
-    keyboardType = 'default', 
-    maxLength,
-}) => {
-    const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-    const isPasswordInput = iconName === 'lock-closed-outline' || iconName === 'key-outline';
-
-    return (
-        <View style={styles.inputWrapper}>
-            <Ionicons name={iconName} size={24} color="#666" style={styles.inputIcon} />
-            <TextInput
-                style={styles.input}
-                placeholder={placeholder}
-                placeholderTextColor="#999"
-                value={value}
-                onChangeText={onChangeText}
-                // Determine if the input should be hidden
-                secureTextEntry={isPasswordInput && !isPasswordVisible} 
-                keyboardType={keyboardType}
-                maxLength={maxLength}
-            />
-            {isPasswordInput && (
-                <TouchableOpacity 
-                    onPress={() => setIsPasswordVisible(!isPasswordVisible)} 
-                    style={styles.eyeButton}
-                >
-                    <Ionicons 
-                        name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} 
-                        size={24} 
-                        color="#666" 
-                    />
-                </TouchableOpacity>
-            )}
-        </View>
-    );
-};
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useAppTheme } from '@/hooks/use-theme-color';
+import { AppButton } from '@/components/ui/app-button';
+import { GlassCard } from '@/components/ui/glass-card';
+import { Radius } from '@/constants/theme';
 
 export default function LoginScreen() {
-    const [phoneNumber, setPhoneNumber] = useState('');
-    const [password, setPassword] = useState('');
+  const t = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-    const [formError, setFormError] : any = useState(false);
-    const [formErrorMessage, setFormErrorMessage] : any = useState("Error");
+  const valid = phone.length >= 10 && password.length === 6;
 
-    const [isLoggin, setIsLoggingIn] = useState(false);
+  const handleLogin = async () => {
+    if (!valid) return;
+    setLoading(true); setError('');
+    try {
+      const res = await axios.post(`${BASE_URL}/login.php`, { mobile_number: phone, password }, { timeout: 10000 });
+      if (res.data?.success && res.data?.token) {
+        await saveToken(res.data.token);
+        router.replace('/');
+      } else setError(res.data?.message || 'Unable to sign in.');
+    } catch (e: any) {
+      setError(e?.response?.data?.message || 'Network error. Please try again.');
+    } finally { setLoading(false); }
+  };
 
-    const isPhoneNumberValid = phoneNumber.length >= 10; 
-    const isPasswordValid = password.length === 6; 
-    const isFormValid = isPhoneNumberValid && isPasswordValid;
-
-    const handleLogin = async () => {
-        if (!isFormValid) {
-            Alert.alert("Login Error", "Please enter a valid phone number and PIN/password.");
-            return;
-        }
-
-        setIsLoggingIn(true);
-        setFormError(false);
-        setFormErrorMessage("");
-   
-        try {
-            const data = {
-                mobile_number: phoneNumber,
-                password: password, 
-            };
-
-            const response = await axios.post(`${BASE_URL}/login.php`,
-                data,
-                {
-                    timeout: 10000,
-                }
-            );
-
-            console.log(response.data)
-            if (response.data.success && response.data.token) {
-                const token = response.data.token;
-                await saveToken(token); 
-                router.push("/");
-            } else {
-                setFormError(true);
-                setFormErrorMessage(response.data.message);
-            }
-
-        } catch (error) {
-            console.log("error")
-            let errorMessage = "An unexpected error occurred. Please check your network.";
-            
-            if (axios.isAxiosError(error) && error.response) {
-                errorMessage = error.response.data.message || "Invalid mobile number or PIN.";
-            }
-
-            setFormError(true);
-            setFormErrorMessage(errorMessage);
-        } finally {
-            setIsLoggingIn(false);
-        }
-    };
-    
-    return (
-        <View style={styles.container}>
-            <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-                
-                <Text style={styles.title}>Welcome Back</Text>
-                <Text style={styles.subtitle}>
-                    Log in with your registered phone number and PIN.
-                </Text>
-
-                {formError && (
-                    <View style={styles.formError}>
-                        <Text style={styles.formErrorText}>
-                            {formErrorMessage}
-                        </Text>
-                    </View>
-                )}
-                
-
-
-                <View style={styles.formContainer}>
-                    
-                    <CustomInput
-                        iconName="call-outline"
-                        placeholder="Mobile Phone Number"
-                        value={phoneNumber}
-                        onChangeText={setPhoneNumber}
-                        keyboardType="phone-pad"
-                        maxLength={15}
-                    />
-
-                    <CustomInput
-                        iconName="key-outline"
-                        placeholder="4-6 Digit PIN or Password"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry={true} 
-                        keyboardType="numeric"
-                        maxLength={6} // Consistent with registration PIN length
-                    />
-
-                </View>
-
-                {/* Forgot Password Link */}
-                <TouchableOpacity onPress={() => router.push('/send')}>
-                    <Text style={styles.forgotPasswordLink}>Forgot PIN/Password?</Text>
-                </TouchableOpacity>
-
-                {isLoggin ? (
-                    <View
-                        style={[styles.loginButton, !isFormValid && styles.disabledButton]}
-                    >
-                        <ActivityIndicator color={"#777"} size={18}/>
-                    </View>
-                ) : (
-                    <TouchableOpacity
-                        style={[styles.loginButton, !isFormValid && styles.disabledButton]}
-                        onPress={handleLogin}
-                        disabled={!isFormValid}
-                    >
-                        <Text style={styles.loginButtonText}>Log In</Text>
-                    </TouchableOpacity>
-                )}
-               
-
-                {/* Register Link */}
-                <View style={styles.registerLinkWrapper}>
-                    <Text style={styles.registerText}>
-                        Don&apos;t have an account?
-                    </Text>
-                    <TouchableOpacity onPress={() => router.replace('/register')}>
-                        <Text style={styles.registerLink}>Register</Text>
-                    </TouchableOpacity>
-                </View>
-
-            </ScrollView>
-        </View>
-    );
+  return (
+    <View style={{ flex: 1, backgroundColor: t.background }}>
+      <LinearGradient colors={t.heroGradient as any} style={[styles.hero, { paddingTop: insets.top + 20 }]}>
+        <View style={styles.glow} />
+        <Animated.View entering={FadeInDown.duration(400)}>
+          <View style={styles.brandIcon}><Ionicons name="flash" size={24} color="#fff" /></View>
+          <Text style={styles.heroTitle}>Welcome back</Text>
+          <Text style={styles.heroSub}>Sign in to your Payreece account.</Text>
+        </Animated.View>
+      </LinearGradient>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <Animated.View entering={FadeInDown.delay(80).duration(400)}>
+            <GlassCard style={styles.card}>
+              {error ? <View style={[styles.errorBox, { backgroundColor: t.dangerSoft, borderColor: t.danger }]}><Text style={{ color: t.danger, fontSize: 14 }}>{error}</Text></View> : null}
+              <Text style={[styles.label, { color: t.textSecondary }]}>Phone number</Text>
+              <View style={[styles.inputWrap, { backgroundColor: t.inputBg, borderColor: t.inputBorder }]}>
+                <Ionicons name="call-outline" size={20} color={t.textMuted} />
+                <TextInput style={[styles.input, { color: t.text }]} placeholder="Mobile number" placeholderTextColor={t.textMuted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={15} />
+              </View>
+              <Text style={[styles.label, { color: t.textSecondary }]}>PIN</Text>
+              <View style={[styles.inputWrap, { backgroundColor: t.inputBg, borderColor: t.inputBorder }]}>
+                <Ionicons name="lock-closed-outline" size={20} color={t.textMuted} />
+                <TextInput style={[styles.input, { color: t.text }]} placeholder="6-digit PIN" placeholderTextColor={t.textMuted} value={password} onChangeText={setPassword} secureTextEntry={!showPw} keyboardType="numeric" maxLength={6} />
+                <Pressable onPress={() => setShowPw(v => !v)}><Ionicons name={showPw ? 'eye-off-outline' : 'eye-outline'} size={20} color={t.textMuted} /></Pressable>
+              </View>
+              <AppButton label="Sign in" onPress={handleLogin} loading={loading} disabled={!valid} style={{ marginTop: 8 }} />
+              <View style={styles.footerRow}>
+                <Text style={{ color: t.textSecondary }}>New here?</Text>
+                <Pressable onPress={() => router.replace('/register')}><Text style={{ color: t.tint, fontWeight: '600' }}> Create account</Text></Pressable>
+              </View>
+            </GlassCard>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
 }
-// ----------------------------------------------------------------------------------
 
-// --- STYLESHEET (Shared and adapted from RegisterScreen) ---
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    scrollContent: {
-        paddingHorizontal: 25,
-        paddingTop: 80, 
-        paddingBottom: 50,
-    },
-    title: {
-        fontSize: 30,
-        fontWeight: 'bold',
-        color: ACTIVE_COLOR,
-        marginBottom: 10,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#666',
-        marginBottom: 40,
-        lineHeight: 22,
-    },
-    formContainer: {
-        marginBottom: 10, 
-    },
-
-    formError: {
-        backgroundColor : "#FCEAFF",
-        borderWidth: 2,
-        padding : 10,
-        paddingHorizontal : 15,
-        borderRadius : 10,
-        marginBottom : 10,
-        borderColor: "#F2003C"
-    },
-    formErrorText : {
-        fontSize : 16,
-        fontWeight : 500,
-        color : "#F2003C"
-    },
-
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: BORDER_COLOR,
-        borderRadius: 10,
-        paddingHorizontal: 15,
-        marginBottom: 20,
-        height: 55,
-        backgroundColor: '#f8f8f8',
-    },
-    inputIcon: {
-        marginRight: 10,
-    },
-    input: {
-        flex: 1,
-        fontSize: 16,
-        color: '#333',
-        paddingVertical: 10,
-    },
-    eyeButton: {
-        padding: 5,
-        marginLeft: 10,
-    },
-    
-    // --- Link Styles ---
-    forgotPasswordLink: {
-        fontSize: 14,
-        color: ACTIVE_COLOR,
-        textAlign: 'right',
-        marginBottom: 30,
-        fontWeight: '600',
-    },
-    
-    // --- Button Styles ---
-    loginButton: {
-        backgroundColor: ACTIVE_COLOR,
-        paddingVertical: 18,
-        borderRadius: 30,
-        alignItems: 'center',
-        marginTop: 10,
-    },
-    loginButtonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    disabledButton: {
-        backgroundColor: '#ccc',
-    },
-    
-    // --- Register Link ---
-    registerLinkWrapper: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        marginTop: 30,
-    },
-    registerText: {
-        fontSize: 16,
-        color: '#666',
-    },
-    registerLink: {
-        fontSize: 16,
-        color: ACTIVE_COLOR,
-        fontWeight: 'bold',
-        marginLeft: 5,
-    },
+  hero: { paddingHorizontal: 24, paddingBottom: 48, overflow: 'hidden' },
+  glow: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,255,255,0.08)', top: -40, right: -40 },
+  brandIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
+  heroTitle: { color: '#fff', fontSize: 32, fontWeight: '700', letterSpacing: -0.6 },
+  heroSub: { color: 'rgba(255,255,255,0.72)', fontSize: 16, marginTop: 8 },
+  content: { padding: 20, marginTop: -24 },
+  card: { padding: 20 },
+  errorBox: { padding: 12, borderRadius: 12, borderWidth: 1, marginBottom: 14 },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 4 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, minHeight: 52, marginBottom: 14 },
+  input: { flex: 1, fontSize: 16 },
+  footerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 18 },
 });

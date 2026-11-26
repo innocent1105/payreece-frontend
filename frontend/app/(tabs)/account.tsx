@@ -1,5 +1,4 @@
 import { BASE_URL } from '@/constants/api';
-import { ThemedView } from '@/components/themed-view';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
@@ -7,322 +6,159 @@ import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useAppTheme } from '@/hooks/use-theme-color';
+import { useThemePreference, type ThemePreference } from '@/contexts/theme-preference';
+import { GlassCard } from '@/components/ui/glass-card';
+import { ScreenHero } from '@/components/ui/screen-hero';
+import { Radius } from '@/constants/theme';
 
-const ACTIVE_COLOR = '#2A2A68'; 
-const ACCENT_COLOR = '#4169E1'; 
-const TEXT_COLOR = '#000';
-const SUB_TEXT_COLOR = '#666';
+type RowProps = { icon: keyof typeof Ionicons.glyphMap; label: string; value?: string; onPress?: () => void; danger?: boolean };
+const Row = ({ icon, label, value, onPress, danger }: RowProps) => {
+  const t = useAppTheme();
+  return (
+    <Pressable style={({ pressed }) => [styles.row, { opacity: pressed ? 0.7 : 1 }]} onPress={onPress}>
+      <View style={[styles.rowIcon, { backgroundColor: danger ? t.dangerSoft : t.accentSoftBg }]}>
+        <Ionicons name={icon} size={18} color={danger ? t.danger : t.tint} />
+      </View>
+      <Text style={[styles.rowLabel, { color: danger ? t.danger : t.text }]}>{label}</Text>
+      {value ? <Text style={[styles.rowValue, { color: t.textSecondary }]}>{value}</Text> : null}
+      {!value ? <Ionicons name="chevron-forward" size={18} color={t.textMuted} /> : null}
+    </Pressable>
+  );
+};
 
-interface SettingRowProps {
-    iconName: keyof typeof Ionicons.glyphMap;
-    label: string;
-    value?: string;
-    onPress?: () => void;
-}
+const ThemeSelector = () => {
+  const t = useAppTheme();
+  const { preference, setPreference } = useThemePreference();
+  const opts: { key: ThemePreference; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+    { key: 'system', label: 'System', icon: 'phone-portrait-outline' },
+    { key: 'light', label: 'Light', icon: 'sunny-outline' },
+    { key: 'dark', label: 'Dark', icon: 'moon-outline' },
+  ];
+  return (
+    <View style={[styles.segment, { backgroundColor: t.inputBg, borderColor: t.border }]}>
+      {opts.map((o) => {
+        const active = preference === o.key;
+        return (
+          <Pressable key={o.key} onPress={() => setPreference(o.key)} style={[styles.segmentBtn, active && { backgroundColor: t.surface, shadowColor: t.cardShadow }]}>
+            <Ionicons name={o.icon} size={16} color={active ? t.tint : t.textMuted} />
+            <Text style={[styles.segmentLabel, { color: active ? t.text : t.textMuted }]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+};
 
-const SettingRow: React.FC<SettingRowProps> = ({ iconName, label, value, onPress }) => (
-    <TouchableOpacity style={settingsStyles.row} onPress={onPress}>
-        <View style={settingsStyles.rowLeft}>
-            <Ionicons name={iconName} size={20} color={TEXT_COLOR} style={settingsStyles.icon} />
-            <Text style={settingsStyles.label}>{label}</Text>
+export default function AccountScreen() {
+  const t = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const { preference } = useThemePreference();
+  const [profile, setProfile] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await SecureStore.getItemAsync('dashboard_data');
+        if (stored) setProfile(JSON.parse(stored)?.data ?? null);
+      } catch {}
+    })();
+  }, []);
+
+  const themeLabel = preference === 'system' ? 'System' : preference === 'dark' ? 'Dark' : 'Light';
+
+  return (
+    <View style={[styles.container, { backgroundColor: t.background }]}>
+      <StatusBar style={t.background === '#000000' ? 'light' : 'dark'} />
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 120 }} showsVerticalScrollIndicator={false}>
+        <ScreenHero title="Account" compact>
+          <Animated.View entering={FadeInDown.duration(380)} style={styles.profileBlock}>
+            <Image source={{ uri: `${BASE_URL}/view_pp.php?file=${profile?.avatar || 'avatar1.jpg'}` }} style={[styles.avatar, { borderColor: 'rgba(255,255,255,0.3)' }]} />
+            <Text style={styles.name}>{profile?.full_name || 'Your account'}</Text>
+            <Text style={styles.handle}>@{profile?.username || 'payreece'}</Text>
+            <Pressable onPress={() => router.push('/edit_profile')} style={styles.editBtn}>
+              <Text style={styles.editBtnText}>Edit profile</Text>
+            </Pressable>
+          </Animated.View>
+        </ScreenHero>
+
+        <View style={styles.body}>
+          <Animated.View entering={FadeInDown.delay(60).duration(380)}>
+            <GlassCard style={styles.card}>
+              <Text style={[styles.cardTitle, { color: t.textSecondary }]}>Appearance</Text>
+              <Text style={[styles.cardSub, { color: t.textMuted }]}>Choose how Payreece looks. System follows your device setting.</Text>
+              <ThemeSelector />
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(120).duration(380)}>
+            <GlassCard style={styles.card}>
+              <Text style={[styles.cardTitle, { color: t.textSecondary }]}>Payment</Text>
+              <Row icon="card-outline" label="Payment methods" onPress={() => router.push('/payment_methods')} />
+              <View style={[styles.divider, { backgroundColor: t.border }]} />
+              <Row icon="shield-checkmark-outline" label="Privacy settings" onPress={() => router.push('/privacy_settings')} />
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(180).duration(380)}>
+            <GlassCard style={styles.card}>
+              <Text style={[styles.cardTitle, { color: t.textSecondary }]}>Preferences</Text>
+              <Row icon="color-palette-outline" label="Theme" value={themeLabel} />
+              <View style={[styles.divider, { backgroundColor: t.border }]} />
+              <Row icon="notifications-outline" label="Notifications" value="On" />
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(240).duration(380)}>
+            <GlassCard style={styles.card}>
+              <Text style={[styles.cardTitle, { color: t.textSecondary }]}>Session</Text>
+              <Row
+                icon="log-out-outline"
+                label="Log out"
+                danger
+                onPress={async () => {
+                  try {
+                    await SecureStore.deleteItemAsync('token');
+                    await SecureStore.deleteItemAsync('dashboard_data');
+                    await SecureStore.deleteItemAsync('payper-token');
+                    await SecureStore.deleteItemAsync('p-transactions');
+                    await AsyncStorage.clear();
+                  } catch {}
+                  router.replace('/login');
+                }}
+              />
+            </GlassCard>
+          </Animated.View>
+
+          <Text style={[styles.footer, { color: t.textMuted }]}>Payreece</Text>
         </View>
-        
-        {value ? (
-            <Text style={settingsStyles.value}>{value}</Text>
-        ) : (
-            <Ionicons name="chevron-forward" size={20} color={SUB_TEXT_COLOR} />
-        )}
-    </TouchableOpacity>
-);
-
-export default function ProfileScreen() {
-    const insets = useSafeAreaInsets();
-    const [user_token, setUserToken] = useState(null);
-    const [public_id, setPublicId] = useState("");
-    const [full_name, setFullName] = useState("");
-    const [email, setEmail] = useState("");
-    const [username, setUsername] = useState("");
-    const [gender, setGender] = useState("");
-    const [avatar, setAvatar] = useState("");
-    const [phone_number, setPhoneNumber] = useState("");
-    const [currency, setCurrency] = useState("K");
-    const [balance, setBalance] = useState("-");
-    const [transactions, setLastTransactions]= useState([]);
-    const [account_type, setAccountType] = useState("main");
-    const [isLoading, setIsLoading] = useState(true); 
-    const [profileData, setProfileData] = useState<any>(null); 
-    
-    const fetchLocalData = async () => {
-        try {
-            const stored = await SecureStore.getItemAsync("dashboard_data");
-            if (!stored) return null;
-            return JSON.parse(stored);
-        } catch (e) {
-            console.error("Failed to load local data", e);
-            return null;
-        }
-    };
-
-
-    useEffect(() => {
-        (async () => {
-          const userLocalData = await fetchLocalData();
-    
-          if (userLocalData?.data) {
-            const d = userLocalData.data;
-            
-            console.log("fetched profile data:", d);
-
-            setProfileData(d);
-            setPhoneNumber(d.phone_number ?? "");
-            setAccountType(d.wallet?.type ?? d.wallet?.main ?? "main");
-            setPublicId(d.public_id ?? "");
-            setFullName(d.full_name ?? "");
-            setEmail(d.email ?? "");
-            setUsername(d.username ?? "");
-            setGender(d.gender ?? "");
-            
-            if(d.avatar == null){
-                setAvatar("avatar1.jpg");
-            }else{
-                setAvatar(d.avatar);
-            }
-            setBalance(d.wallet?.balance ?? "-");
-            setCurrency(d.wallet?.currency ?? "K");
-          }
-    
-        })();
-    }, []);
-
-    
-    return (
-        <ThemedView style={{ flex: 1 }}>
-            <StatusBar style="auto" />
-            
-            <ScrollView contentContainerStyle={[
-                settingsStyles.scrollContent, 
-                { paddingBottom: insets.bottom + 10 }
-            ]}>
-                
-                <View style={settingsStyles.profileHeader}>
-                    <Image 
-                        source={{ uri: `${BASE_URL}/view_pp.php?file=${avatar}` }} 
-                        style={settingsStyles.profileImage} 
-                    />
-                    <Text style={settingsStyles.name}>
-                        {full_name}
-                    </Text>
-                    <Text style={settingsStyles.email}>
-                        @{username}
-                    </Text>
-                    
-                    <TouchableOpacity style={settingsStyles.editButton} onPress={() => router.push('/edit_profile')}>
-                        <Text style={settingsStyles.editButtonText}>Edit profile</Text>
-                    </TouchableOpacity>
-                </View>
-                
-                {/* 2. Payment Info Section */}
-                <View style={settingsStyles.card}>
-                    <Text style={settingsStyles.cardTitle}>Payment info</Text>
-                    
-                    <SettingRow 
-                        iconName="card-outline" 
-                        label="Payment methods" 
-                        onPress={() => router.push('/payment_methods')} 
-                    />
-                    
-                    {/* <SettingRow 
-                        iconName="wallet-outline" 
-                        label="My Cards" 
-                        onPress={() => router.push('/cards')} 
-                    /> */}
-                </View>
-
-          
-                <View style={settingsStyles.card}>
-                    <Text style={settingsStyles.cardTitle}>Settings</Text>
-                    
-                    {/* <SettingRow 
-                        iconName="text-outline" 
-                        label="Language" 
-                        value="English"
-                    />
-                    
-                    <SettingRow 
-                        iconName="moon-outline" 
-                        label="Theme" 
-                        value="Light"
-                    /> */}
-
-                    <SettingRow 
-                        iconName="eye-off-outline" 
-                        label="Privacy settings" 
-                        onPress={() => router.push('/privacy_settings')} 
-                    />
-
-                    <SettingRow 
-                        iconName="notifications-outline" 
-                        label="Notifications" 
-                        value="Enabled"
-                    />
-
-                    
-
-                    {/* <SettingRow 
-                        iconName="headset-outline" 
-                        label="Contact support"
-                        onPress={() => console.log('Open support chat')}
-                    /> */}
-                </View>
-
-                
-                <View style={settingsStyles.card}>
-                    <Text style={settingsStyles.cardTitle}>Account sign out</Text>
-                  
-                    <SettingRow 
-                        iconName="log-out-outline" 
-                        label="Log out"
-                        onPress={async () => {
-                            try {
-                                console.log('logging out');
-
-                                await SecureStore.deleteItemAsync('token');
-                                await SecureStore.deleteItemAsync('dashboard_data');
-                                await SecureStore.deleteItemAsync('payper-token');
-                                await SecureStore.deleteItemAsync('p-transactions');
-
-                                await AsyncStorage.clear();
-
-                            } catch (e) {
-                                console.warn('Failed to clear storage', e);
-                            } finally {
-                                router.replace('/login');
-                            }
-                        }}
-
-                    />
-
-                </View>
-
-                <View style={settingsStyles.footer}>
-                    <Text style={settingsStyles.footerText}>Payper - Pay as you learn</Text>
-                    {/* <Text style={settingsStyles.footerText}>From Cynite</Text> */}
-                </View>
-              
-
-            </ScrollView>
-        </ThemedView>
-    );
+      </ScrollView>
+    </View>
+  );
 }
 
-const settingsStyles = StyleSheet.create({
-    scrollContent: {
-        paddingTop: 0,
-        paddingHorizontal: 20,
-        backgroundColor: '#f8f8f8', 
-    },
-    
-    footer : {
-        textAlign : 'center',
-        marginBottom: 90,
-    },
-    footerText : {
-        textAlign : 'center',
-        fontSize: 14,
-        fontWeight: '700',
-        color: "#aac",
-    },
-   
-    profileHeader: {
-        alignItems: 'center',
-        paddingTop: 80,
-        paddingBottom :30,
-        backgroundColor: '#fff',
-        marginHorizontal: -20, 
-        borderBottomLeftRadius: 30,
-        borderBottomRightRadius: 30,
-        marginBottom: 20,
-        marginTop : 20
-    },
-    profileImage: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        borderWidth: 2,
-        borderColor: "#B0C4DE",
-        marginBottom: 10,
-    },
-    name: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: TEXT_COLOR,
-    },
-    email: {
-        fontSize: 14,
-        color: SUB_TEXT_COLOR,
-        marginBottom: 15,
-    },
-    editButton: {
-        borderWidth: 1,
-        borderColor: ACCENT_COLOR,
-        borderRadius: 20,
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-    },
-    editButtonText: {
-        color: ACCENT_COLOR,
-        fontWeight: '600',
-    },
-
-    card: {
-        backgroundColor: '#fff',
-        borderRadius: 15,
-        paddingHorizontal: 15,
-        paddingVertical: 10,
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 5,
-        elevation: 2,
-    },
-    cardTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: SUB_TEXT_COLOR,
-        paddingTop: 10,
-        paddingBottom: 15,
-        paddingLeft: 5,
-    },
-    
-    // --- Row Styles ---
-    row: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: 15,
-        paddingHorizontal: 5,
-        // Separator between rows (optional, but good practice)
-        borderTopWidth: 1, 
-        borderTopColor: '#f5f5f5', 
-    },
-    rowLeft: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        flex: 1,
-    },
-    icon: {
-        marginRight: 10,
-    },
-    label: {
-        fontSize: 15,
-        color: TEXT_COLOR,
-        fontWeight: '500',
-    },
-    value: {
-        fontSize: 15,
-        color: SUB_TEXT_COLOR,
-    },
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  profileBlock: { alignItems: 'center', marginTop: 6, paddingBottom: 8 },
+  avatar: { width: 84, height: 84, borderRadius: 42, borderWidth: 2, marginBottom: 12 },
+  name: { color: '#fff', fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  handle: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 2, marginBottom: 14 },
+  editBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  editBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  body: { padding: 20, gap: 14, marginTop: -12 },
+  card: { padding: 4 },
+  cardTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4, paddingHorizontal: 8, paddingTop: 8 },
+  cardSub: { fontSize: 13, lineHeight: 18, paddingHorizontal: 8, marginBottom: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8 },
+  rowIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  rowLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
+  rowValue: { fontSize: 15, marginRight: 4 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 54 },
+  segment: { flexDirection: 'row', padding: 4, borderRadius: Radius.md, borderWidth: 1, marginHorizontal: 8, marginBottom: 8 },
+  segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10 },
+  segmentLabel: { fontSize: 13, fontWeight: '600' },
+  footer: { textAlign: 'center', fontSize: 13, marginTop: 8 },
 });

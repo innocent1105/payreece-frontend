@@ -1,141 +1,48 @@
+import { GlassCard } from '@/components/ui/glass-card';
+import { ScreenHero } from '@/components/ui/screen-hero';
+import { AppButton } from '@/components/ui/app-button';
+import { useAppTheme } from '@/hooks/use-theme-color';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const ACTIVE_COLOR = '#2A2A68'; 
+export default function SuccessfulTransfer({ amount: pAmount, username: pUser, phone_number: pPhone, reference: pRef }: any) {
+  const t = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<any>();
+  const amount = pAmount ?? params.amount;
+  const username = pUser ?? params.username;
+  const phone_number = pPhone ?? params.phone_number;
+  const reference = pRef ?? params.reference;
 
-type TransferSuccessScreenProps = {
-    customTitle?: string;
-    customMessage?: string;
-    amount?: any;
-    phone_number?: string;
-};
-
-export default function TransferSuccessScreen(props: TransferSuccessScreenProps) {
-    const params = useLocalSearchParams();
-    const amount = props.amount ?? params.amount;
-    const username = params.username;
-    const phone_number = props.phone_number ?? params.phone_number;
-    const reference = params.reference;
-    const title = props.customTitle ?? (phone_number != undefined ? 'Transfer Successful!' : 'Deposit Successful!');
-    const message = props.customMessage ?? (phone_number != undefined ? `Has been sent to ${username ?? ''}` : 'Has been added to your balance');
-
-    return (
-        <View style={styles.container}>
-            <View style={styles.content}>
-                <View style={styles.iconContainer}>
-                    <View style={styles.circle}>
-                        <Ionicons name="checkmark" size={60} color={ACTIVE_COLOR} />
-                    </View>
-                    <Ionicons name="sparkles" size={24} color="#B0C4DE" style={styles.star1} />
-                    <Ionicons name="add" size={20} color="#B0C4DE" style={styles.star2} />
-                </View>
-                
-                <Text style={styles.title}>{title}</Text>
-
-                <View style={styles.amountBadge}>
-                    <Text style={styles.amountText}>K{amount}</Text>
-                </View>
-
-                <Text style={styles.detailsText}>{message}</Text>
-
-                {phone_number != undefined && (
-                    <Text style={styles.phoneText}>({phone_number})</Text>
-                )}
-
-                {reference != undefined && (
-                    <Text style={styles.referenceText}>Ref: {reference}</Text>
-                )}
-
-
-            </View>
-            <TouchableOpacity 
-                style={styles.doneButton} 
-                onPress={() => router.replace('/')}
-            >
-                <Text style={styles.doneButtonText}>Done</Text>
-            </TouchableOpacity>
-        </View>
-    );
+  return (
+    <View style={{ flex: 1, backgroundColor: t.background }}>
+      <ScreenHero title="Success" compact />
+      <View style={[styles.body, { paddingBottom: insets.bottom + 24 }]}>
+        <GlassCard style={{ alignItems: 'center', paddingVertical: 30 }}>
+          <View style={[styles.icon, { backgroundColor: t.successSoft }]}><Ionicons name="checkmark" size={38} color={t.success} /></View>
+          <Text style={[styles.title, { color: t.text }]}>Transfer sent</Text>
+          <Text style={{ color: t.textSecondary, textAlign: 'center', marginTop: 6 }}>Your money is on its way.</Text>
+          <Text style={[styles.amount, { color: t.text }]}>K{amount}</Text>
+          <View style={[styles.info, { backgroundColor: t.surfaceMuted }]}>
+            {[['To', username], ['Phone', phone_number], ['Reference', reference]].filter(([,v]) => v).map(([k,v]) => (
+              <View key={k as string} style={styles.row}><Text style={{ color: t.textSecondary }}>{k}</Text><Text style={{ color: t.text, fontWeight: '600' }}>{String(v)}</Text></View>
+            ))}
+          </View>
+        </GlassCard>
+        <AppButton label="Done" onPress={() => router.replace('/(tabs)')} />
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#F8F9FF',
-        padding: 25,
-        paddingBottom : 50,
-        justifyContent: 'center',
-    },
-    content: {
-        alignItems: 'center',
-        flex: 1,
-        justifyContent: 'center',
-        marginTop: -60,
-    },
-    iconContainer: {
-        marginBottom: 40,
-        position: 'relative',
-    },
-    circle: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: '#fff',
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 10,
-        shadowColor: ACTIVE_COLOR,
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 15,
-    },
-    star1: { position: 'absolute', top: -10, left: -20 },
-    star2: { position: 'absolute', bottom: 10, right: -25 },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#000',
-        marginBottom: 25,
-    },
-    amountBadge: {
-        backgroundColor: '#F0F2FF',
-        paddingHorizontal: 30,
-        paddingVertical: 15,
-        borderRadius: 15,
-        marginBottom: 30,
-    },
-    amountText: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: ACTIVE_COLOR,
-    },
-    detailsText: {
-        fontSize: 16,
-        color: '#999',
-        textAlign: 'center',
-    },
-    phoneText: {
-        fontSize: 14,
-        color: '#BBB',
-        marginTop: 5,
-    },
-    referenceText: {
-        fontSize: 12,
-        color: '#CCC',
-        marginTop: 30,
-        fontFamily: 'monospace',
-    },
-    doneButton: {
-        backgroundColor: ACTIVE_COLOR,
-        paddingVertical: 18,
-        borderRadius: 20,
-        alignItems: 'center',
-    },
-    doneButtonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
+  body: { padding: 20, gap: 14, marginTop: -24 },
+  icon: { width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 28, fontWeight: '700', letterSpacing: -0.5, marginTop: 18 },
+  amount: { fontSize: 36, fontWeight: '700', letterSpacing: -1, marginTop: 14 },
+  info: { width: '100%', borderRadius: 16, padding: 14, marginTop: 20 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8 },
 });

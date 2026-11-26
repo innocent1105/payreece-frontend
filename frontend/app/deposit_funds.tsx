@@ -1,216 +1,98 @@
-import { BASE_URL } from '@/constants/api';
-import { getToken } from '@/components/auth/auth';
-import TransactionProcessingCard from '@/components/paymentProcessing';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
-import {
-    ActivityIndicator,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import TransferSuccessScreen from './successful_transfer';
+import { BASE_URL } from "@/constants/api";
+import { AppButton } from "@/components/ui/app-button";
+import { GlassCard } from "@/components/ui/glass-card";
+import { ScreenHero } from "@/components/ui/screen-hero";
+import { useAppTheme } from "@/hooks/use-theme-color";
+import { Radius } from "@/constants/theme";
+import axios from "axios";
+import { router } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Animated, { FadeInDown } from "react-native-reanimated";
+import { Ionicons } from "@expo/vector-icons";
 
-const PRIMARY_BLUE = '#4C6FFF'; 
-const BORDER_COLOR = '#E5E7EB';
+export default function DepositFunds() {
+  const t = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const [amount, setAmount] = useState("");
+  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<"idle" | "pending" | "success" | "failed">("idle");
+  const [error, setError] = useState("");
+  const pollRef = useRef<any>(null);
 
-export default function AddMoneyScreen() {
-    const [user_token, setUserToken] = useState<string | null>(null);
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-    useEffect(() => {
-        getToken().then((token) => {
-            if (token) setUserToken(token);
-        });
-    }, []);
-
-    const [amount, setAmount] : any = useState('');
-    const [mobileNumber, setMobileNumber] = useState('');
-    const [status, setStatus] = useState<'input' | 'pending' | 'success'>('input');
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    const isReady = Number(amount) > 0 && mobileNumber.length >= 10;
-
-    useEffect(() => () => {
-        if (pollRef.current) clearInterval(pollRef.current);
-    }, []);
-
-    const parseJson = async (response: Response) => {
-        const text = await response.text();
-        try {
-            return JSON.parse(text);
-        } catch {
-            throw new Error(text.slice(0, 200) || 'Invalid server response');
-        }
-    };
-
-    const handleAddMoney = async () => {
-        setStatus('pending'); 
-            
-        try {
-            const response = await fetch(`${BASE_URL}/deposit_funds.php`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify({
-                    amount: Number(amount),
-                    phone: mobileNumber,
-                    p_id: user_token
-                })
-            });
-
-            const result = await parseJson(response);
-            console.log(result);
-            if (result.success && result.reference) {
-                checkStatusPeriodically(result.reference);
-            } else {
-                alert(result.message || 'Could not initiate deposit. Please try again.');
-                setStatus('input');
-            }
-        } catch (error) {
-            setStatus('input');
-            alert("Network error");
-            console.log(error);
-        }
-    };
-
-
-
-
-
-const checkStatusPeriodically = (ref: string) => {
+  const startPolling = (reference: string) => {
     let attempts = 0;
-    const maxAttempts = 40;
-
-    if (pollRef.current) clearInterval(pollRef.current);
-
     pollRef.current = setInterval(async () => {
-        attempts++;
-        try {
-            const res = await fetch(
-                `${BASE_URL}/check_deposit_status.php?ref=${encodeURIComponent(ref)}`,
-                { headers: { 'Accept': 'application/json' } },
-            );
-            const data = await parseJson(res);
-
-            if (data.status === 'successful' || data.success === true && data.status === 'success') {
-                if (pollRef.current) clearInterval(pollRef.current);
-                setStatus('success');
-            } else if (data.status === 'failed' || attempts >= maxAttempts) {
-                if (pollRef.current) clearInterval(pollRef.current);
-                setStatus('input');
-                alert('Transaction failed or timed out. Please try again.');
-            }
-        } catch (e) {
-            console.error('Polling error', e);
+      attempts++;
+      try {
+        const res = await axios.post(`${BASE_URL}/check_deposit_status.php`, { reference }, { timeout: 10000 });
+        if (res.data?.status === "successful" || res.data?.status === "success") {
+          clearInterval(pollRef.current); setStatus("success");
+        } else if (res.data?.status === "failed" || attempts > 40) {
+          clearInterval(pollRef.current); setStatus(attempts > 40 ? "failed" : "failed"); setError("Deposit not confirmed. Please try again.");
         }
+      } catch {}
     }, 3000);
-};
+  };
 
+  const submit = async () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0 || phone.length < 10) { setError("Enter a valid amount and phone number."); return; }
+    setLoading(true); setError(""); setStatus("pending");
+    try {
+      const res = await axios.post(`${BASE_URL}/deposit_funds.php`, { amount: amt, phone_number: phone }, { timeout: 15000 });
+      if (res.data?.success && res.data?.reference) startPolling(res.data.reference);
+      else { setStatus("failed"); setError(res.data?.message || "Could not initiate deposit."); }
+    } catch { setStatus("failed"); setError("Network error. Please try again."); }
+    finally { setLoading(false); }
+  };
 
-
-
-
-    if (status === 'success') {
-        return (
-            <TransferSuccessScreen
-                customTitle="Top Up Success"
-                customMessage="Has been added to your balance"
-                amount={amount}
-                phone_number={mobileNumber}
-            />
-        );
-    }
-
+  if (status === "success") {
     return (
-        <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
-                    <Ionicons name="arrow-back" size={24} color="#111827" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>Add Money</Text>
-                <View style={{ width: 24 }} />
-            </View>
-
-            <View style={styles.content}>
-                {status === 'input' ? (
-                    <>
-                        <Text style={styles.sectionTitle}>Mobile Money</Text>
-                        <Text style={styles.sectionSubtitle}>
-                            Add money to your account via Mobile Money.
-                        </Text>
-
-                        <View style={styles.inputContainer}>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Amount"
-                                placeholderTextColor="#9CA3AF"
-                                keyboardType="numeric"
-                                value={amount}
-                                onChangeText={setAmount}
-                            />
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Mobile Number"
-                                placeholderTextColor="#9CA3AF"
-                                keyboardType="phone-pad"
-                                value={mobileNumber}
-                                onChangeText={setMobileNumber}
-                            />
-                        </View>
-
-                        <View style={styles.securityBadge}>
-                            <Ionicons name="shield-checkmark-outline" size={20} color={PRIMARY_BLUE} />
-                            <Text style={styles.securityText}>Your money is held in Licensed Banks</Text>
-                        </View>
-
-                        <TouchableOpacity 
-                            disabled={!isReady}
-                            style={[styles.addButton, { backgroundColor: isReady ? PRIMARY_BLUE : '#D1D5DB' }]}
-                            onPress={handleAddMoney}
-                        >
-                            <Text style={styles.addButtonText}>Add Money</Text>
-                        </TouchableOpacity>
-                    </>
-                ) : (
-                    <View style={styles.pendingContainer}>
-                        <TransactionProcessingCard 
-                            amount={amount}
-                            receiver="Your Wallet"
-                            mobileNumber={mobileNumber}
-                        />
-                        <Text style={styles.waitText}>Waiting for USSD confirmation...</Text>
-                        <ActivityIndicator size="large" color={PRIMARY_BLUE} style={{ marginTop: 20 }} />
-                    </View>
-                )}
-            </View>
-        </SafeAreaView>
+      <View style={{ flex: 1, backgroundColor: t.background }}>
+        <ScreenHero title="Deposit" onBack={() => router.replace("/(tabs)")} compact />
+        <View style={[styles.body, { alignItems: "center", paddingTop: 40 }]}>
+          <View style={[styles.successIcon, { backgroundColor: t.successSoft }]}><Ionicons name="checkmark" size={40} color={t.success} /></View>
+          <Text style={[styles.successTitle, { color: t.text }]}>Money added</Text>
+          <Text style={{ color: t.textSecondary, textAlign: "center", marginBottom: 24 }}>Your deposit of K{amount} was successful.</Text>
+          <AppButton label="Done" onPress={() => router.replace("/(tabs)")} style={{ width: "100%" }} />
+        </View>
+      </View>
     );
+  }
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.background }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} showsVerticalScrollIndicator={false}>
+        <ScreenHero title="Add money" subtitle="Top up with mobile money" onBack={() => router.back()} />
+        <View style={styles.body}>
+          <Animated.View entering={FadeInDown.duration(380)}>
+            <GlassCard>
+              <Text style={[styles.label, { color: t.textSecondary }]}>Amount</Text>
+              <TextInput style={[styles.input, { backgroundColor: t.inputBg, borderColor: t.inputBorder, color: t.text }]} placeholder="0.00" placeholderTextColor={t.textMuted} keyboardType="numeric" value={amount} onChangeText={setAmount} />
+              <Text style={[styles.label, { color: t.textSecondary }]}>Mobile money number</Text>
+              <TextInput style={[styles.input, { backgroundColor: t.inputBg, borderColor: t.inputBorder, color: t.text }]} placeholder="097..." placeholderTextColor={t.textMuted} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+              {error ? <Text style={{ color: t.danger, marginBottom: 12 }}>{error}</Text> : null}
+              {status === "pending" ? <Text style={{ color: t.textSecondary, marginBottom: 12, textAlign: "center" }}>Waiting for USSD confirmation…</Text> : null}
+              <AppButton label={status === "pending" ? "Waiting for confirmation" : "Add money"} onPress={submit} loading={loading || status === "pending"} />
+              <View style={[styles.note, { backgroundColor: t.accentSoftBg }]}><Ionicons name="shield-checkmark-outline" size={16} color={t.tint} /><Text style={{ color: t.textSecondary, fontSize: 13, flex: 1 }}>You’ll receive a prompt on your phone to confirm.</Text></View>
+            </GlassCard>
+          </Animated.View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
 }
 
 const styles = StyleSheet.create({
-    // ... your existing styles ...
-    container: { paddingTop: 40, flex: 1, backgroundColor: '#FFFFFF' },
-    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-    headerBackButton: { width: 24, alignItems: 'center', justifyContent: 'center' },
-    content: { padding: 24, flex: 1 },
-    sectionTitle: { fontSize: 22, fontWeight: 'bold', color: '#111827', marginBottom: 8 },
-    sectionSubtitle: { fontSize: 15, color: '#6B7280', marginBottom: 32 },
-    inputContainer: { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: BORDER_COLOR, borderRadius: 12, marginBottom: 16, paddingHorizontal: 16, height: 60, justifyContent: 'center' },
-    input: { fontSize: 16, color: '#111827' },
-    securityBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F4FF', padding: 12, borderRadius: 10, marginVertical: 20, borderWidth: 1, borderColor: '#E0E7FF' },
-    securityText: { fontSize: 13, color: '#374151', marginLeft: 10, fontWeight: '500' },
-    addButton: { height: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-    addButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
-    pendingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    waitText: { marginTop: 20, color: '#6B7280', fontSize: 16, textAlign: 'center' }
+  body: { padding: 20, marginTop: -24 },
+  label: { fontSize: 13, fontWeight: "600", marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, minHeight: 52, fontSize: 16, marginBottom: 14 },
+  note: { flexDirection: "row", gap: 10, padding: 14, borderRadius: Radius.md, marginTop: 16, alignItems: "center" },
+  successIcon: { width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  successTitle: { fontSize: 28, fontWeight: "700", letterSpacing: -0.5, marginBottom: 8 },
 });

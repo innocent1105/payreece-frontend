@@ -35,7 +35,12 @@ export async function registerForPushNotifications(): Promise<string | null> {
 
     return tokenData.data;
   } catch (error) {
-    console.error('Failed to get Expo push token:', error);
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('Expo Go') || message.includes('development build')) {
+      console.warn('Push notifications require a development build; skipping on Expo Go');
+    } else {
+      console.warn('Could not get Expo push token:', message);
+    }
     return null;
   }
 }

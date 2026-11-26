@@ -1,89 +1,45 @@
-import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, StyleSheet, Text, View } from 'react-native';
+﻿import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { useAppTheme } from '@/hooks/use-theme-color';
 
 export default function LoadingScreen() {
-  const [pulse] = useState(() => new Animated.Value(1));
-
+  const t = useAppTheme();
+  const scale = useSharedValue(1);
   useEffect(() => {
-    const pulseAnim = pulse;
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    animation.start();
-    return () => animation.stop();
-  }, []);
+    scale.value = withRepeat(withTiming(1.06, { duration: 1400 }), -1, true);
+  }, [scale]);
+  const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
   return (
-    <View style={styles.container}>
-      <View style={styles.brandContainer}>
-        <Animated.View style={{ transform: [{ scale: pulse }] }}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="flash" size={45} color="#fff" />
-          </View>
+    <LinearGradient colors={t.heroGradient as any} style={styles.container}>
+      <View style={styles.glow} />
+      <Animated.View entering={FadeIn.duration(500)} style={styles.brand}>
+        <Animated.View style={[styles.iconCircle, aStyle]}>
+          <Ionicons name="flash" size={34} color="#fff" />
         </Animated.View>
-        <Text style={styles.logoText}><Text style={styles.logoBold}>Payreece.</Text></Text>
-      </View>
-
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="small" color="#94A3B8" />
-        <Text style={styles.loadingText}>Securing your connection...</Text>
-        <Text style={styles.loadingText}>Cynite Technologies</Text>
-      </View>
-    </View>
+        <Text style={styles.logo}>Payreece</Text>
+        <Text style={styles.tag}>Move money, beautifully.</Text>
+      </Animated.View>
+      <Animated.View entering={FadeInDown.delay(200).duration(450)} style={styles.footer}>
+        <Text style={styles.footerText}>Securing your connection</Text>
+      </Animated.View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#2A2A68',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  brandContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  glow: { position: 'absolute', width: 320, height: 320, borderRadius: 160, backgroundColor: 'rgba(10,132,255,0.16)', top: '20%' },
+  brand: { alignItems: 'center' },
   iconCircle: {
-    width: 55,
-    height: 55,
-    borderRadius: 25,
-    backgroundColor: '#2A2A68',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
+    width: 72, height: 72, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
   },
-  logoText: {
-    fontSize: 28,
-    letterSpacing: -0.5,
-    color: '#fff',
-    fontWeight: '400',
-  },
-  logoBold: {
-    fontWeight: '800',
-  },
-  loaderContainer: {
-    position: 'absolute',
-    bottom: 60,
-    alignItems: 'center',
-    gap: 4,
-  },
-  loadingText: {
-    fontSize: 13,
-    color: '#94A3B8',
-    fontWeight: '500',
-    letterSpacing: 0.5,
-  }
+  logo: { fontSize: 34, fontWeight: '700', color: '#fff', letterSpacing: -0.8 },
+  tag: { fontSize: 15, color: 'rgba(255,255,255,0.68)', marginTop: 8 },
+  footer: { position: 'absolute', bottom: 56, alignItems: 'center' },
+  footerText: { fontSize: 13, color: 'rgba(255,255,255,0.5)', letterSpacing: 0.2 },
 });

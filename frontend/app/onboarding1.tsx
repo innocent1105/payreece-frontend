@@ -1,174 +1,50 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React from 'react';
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Image, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { AppButton } from '@/components/ui/app-button';
+import { useAppTheme } from '@/hooks/use-theme-color';
 
-export default function NewLifeOnboarding() {
+export default function Onboarding() {
+  const t = useAppTheme();
+  const insets = useSafeAreaInsets();
   return (
-    <SafeAreaView style={styles.container}>
-        <Text style={styles.logoText}>Payreece.</Text>
+    <LinearGradient colors={t.heroGradient as any} style={[styles.container, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}>
+      <View style={styles.glowA} /><View style={styles.glowB} />
+      <Animated.Text entering={FadeIn.duration(500)} style={styles.brand}>Payreece</Animated.Text>
 
-      <View style={styles.content}>
-        
-
-        <View style={styles.avatarContainer}>
-          <View style={[styles.avatarWrapper, styles.leftAvatar]}>
-            <Image 
-              source={require('../assets/images/avatars/avatar1.jpg')}
-              style={styles.avatarImage} 
-            />
-          </View>
-          
-          <View style={[styles.avatarWrapper, styles.rightAvatar]}>
-            <Image 
-              source={require('../assets/images/avatars/avatar2.jpg')}
-              style={styles.avatarImage} 
-            />
-          </View>
-
-          <View style={[styles.avatarWrapper, styles.centerAvatar]}>
-            <Image 
-              source={require('../assets/images/avatars/avatar3.jpg')}
-              style={styles.avatarImage} 
-            />
-            
-          </View>
+      <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.center}>
+        <View style={styles.avatars}>
+          <Image source={require('../assets/images/avatars/avatar1.jpg')} style={[styles.avatar, styles.a1]} />
+          <Image source={require('../assets/images/avatars/avatar3.jpg')} style={[styles.avatar, styles.a2]} />
+          <Image source={require('../assets/images/avatars/avatar2.jpg')} style={[styles.avatar, styles.a3]} />
         </View>
+        <Text style={styles.title}>Borderless transfers,{'\n'}made simple.</Text>
+        <Text style={styles.sub}>Move money across borders instantly, securely, and with clarity.</Text>
+      </Animated.View>
 
-        <View style={styles.textContainer}>
-          <Text style={styles.title}>
-            Borderless transfers{"\n"}made simple
-           </Text>
-            <Text style={styles.subtitle}>
-             Move money across borders instantly and securely.
-            </Text>
-
-        </View>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity onPress={()=> {router.push("/register")}} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Signup</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity onPress={()=> {router.push("/login")}}  style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Login</Text>
-          </TouchableOpacity>
-        </View>
-
-      </View>
-    </SafeAreaView>
+      <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.actions}>
+        <AppButton label="Create account" onPress={() => router.push('/register')} style={{ width: '100%' }} />
+        <AppButton label="Sign in" variant="secondary" onPress={() => router.push('/login')} style={{ width: '100%', backgroundColor: 'transparent' }} />
+      </Animated.View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#2A2A68', 
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: 30,
-    justifyContent: 'space-between',
-    paddingVertical: 70,
-  },
-  logoText: {
-    fontSize: 24,
-    fontWeight: '700',
-    paddingHorizontal: 30,
-    paddingTop: 30,
-    color: '#fff',
-    marginTop: 20,
-  },
-  avatarContainer: {
-    height: 200,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  avatarWrapper: {
-    width: 110,
-    height: 110,
-    borderRadius: 25,
-    borderWidth: 3,
-    borderColor: '#FFF',
-    overflow: 'hidden',
-    backgroundColor: '#FFF',
-    position: 'absolute',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-  },
-  centerAvatar: {
-    width: 130,
-    height: 130,
-    zIndex: 10,
-    borderRadius: 30,
-    bottom: 20,
-  },
-  leftAvatar: {
-    left: 40,
-    transform: [{ rotate: '-10deg' }],
-    zIndex: 5,
-  },
-  rightAvatar: {
-    right: 40,
-    transform: [{ rotate: '10deg' }],
-    zIndex: 5,
-  },
-  starBadge: {
-    position: 'absolute',
-    bottom: -5,
-    alignSelf: 'center',
-    backgroundColor: '#111',
-    padding: 10,
-    borderRadius: 15,
-  },
-  textContainer: {
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#fff',
-    textAlign: 'center',
-    lineHeight: 38,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#fff',
-    opacity: 0.7,
-    textAlign: 'center',
-    marginTop: 15,
-    paddingHorizontal: 20,
-  },
-  buttonContainer: {
-    width: '100%',
-    gap: 10,
-  },
-  primaryButton: {
-    backgroundColor: '#fff',
-    paddingVertical: 18,
-    borderRadius: 20,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#2A2A68',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    paddingVertical: 18,
-    borderRadius: 20,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#fff',
-  },
-  secondaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '500',
-  },
+  container: { flex: 1, paddingHorizontal: 24, justifyContent: 'space-between' },
+  glowA: { position: 'absolute', width: 280, height: 280, borderRadius: 140, backgroundColor: 'rgba(255,255,255,0.07)', top: -60, right: -80 },
+  glowB: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(10,132,255,0.18)', bottom: 120, left: -60 },
+  brand: { color: '#fff', fontSize: 28, fontWeight: '700', letterSpacing: -0.5 },
+  center: { alignItems: 'center' },
+  avatars: { width: 260, height: 170, marginBottom: 32 },
+  avatar: { width: 96, height: 96, borderRadius: 32, position: 'absolute', borderWidth: 3, borderColor: 'rgba(255,255,255,0.25)' },
+  a1: { left: 10, top: 30, transform: [{ rotate: '-8deg' }] },
+  a2: { left: 82, top: 0, width: 110, height: 110, borderRadius: 36, zIndex: 2 },
+  a3: { right: 10, top: 30, transform: [{ rotate: '8deg' }] },
+  title: { color: '#fff', fontSize: 38, fontWeight: '700', letterSpacing: -1, textAlign: 'center', lineHeight: 44 },
+  sub: { color: 'rgba(255,255,255,0.72)', fontSize: 16, textAlign: 'center', marginTop: 16, lineHeight: 24, paddingHorizontal: 10 },
+  actions: { gap: 12 },
 });

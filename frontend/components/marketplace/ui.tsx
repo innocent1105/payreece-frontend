@@ -1,64 +1,51 @@
 import React from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAppTheme } from '@/hooks/use-theme-color';
+import { Radius } from '@/constants/theme';
 
-export const PRIMARY_BLUE = '#4C6FFF';
+export const PRIMARY_BLUE = '#0A84FF';
 
 export function SectionCard({ title, children }: { title?: string; children: React.ReactNode }) {
+  const t = useAppTheme();
   return (
-    <View style={styles.card}>
-      {title && <Text style={styles.cardTitle}>{title}</Text>}
+    <View style={[styles.card, { backgroundColor: t.surface, borderColor: t.border, shadowColor: t.cardShadow }]}>
+      {title ? <Text style={[styles.cardTitle, { color: t.text }]}>{title}</Text> : null}
       {children}
     </View>
   );
 }
 
 export function PrimaryButton({
-  label,
-  onPress,
-  disabled,
-  tone = 'primary',
+  label, onPress, disabled, tone = 'primary',
 }: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  tone?: 'primary' | 'secondary' | 'danger';
+  label: string; onPress: () => void; disabled?: boolean; tone?: 'primary' | 'secondary' | 'danger';
 }) {
+  const t = useAppTheme();
+  const bg = tone === 'primary' ? t.tint : tone === 'danger' ? t.dangerSoft : t.accentSoftBg;
+  const fg = tone === 'primary' ? '#fff' : tone === 'danger' ? t.danger : t.tint;
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled}
-      style={[styles.button, styles[tone], disabled && styles.disabled]}
-    >
-      <Text style={[styles.buttonText, tone === 'secondary' && styles.secondaryText]}>{label}</Text>
+    <TouchableOpacity onPress={onPress} disabled={disabled} style={[styles.button, { backgroundColor: bg, opacity: disabled ? 0.5 : 1 }]}>
+      <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
 export function Field({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  keyboardType = 'default',
-  secureTextEntry,
-  multiline,
+  label, value, onChangeText, placeholder, keyboardType = 'default', secureTextEntry, multiline,
 }: {
-  label: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  placeholder?: string;
-  keyboardType?: 'default' | 'numeric' | 'decimal-pad';
-  secureTextEntry?: boolean;
-  multiline?: boolean;
+  label: string; value: string; onChangeText: (v: string) => void; placeholder?: string;
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad'; secureTextEntry?: boolean; multiline?: boolean;
 }) {
+  const t = useAppTheme();
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, { color: t.textSecondary }]}>{label}</Text>
       <TextInput
-        style={[styles.input, multiline && styles.multiline]}
+        style={[styles.input, { backgroundColor: t.inputBg, borderColor: t.inputBorder, color: t.text }, multiline && styles.multiline]}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
+        placeholderTextColor={t.textMuted}
         keyboardType={keyboardType}
         secureTextEntry={secureTextEntry}
         multiline={multiline}
@@ -68,86 +55,25 @@ export function Field({
 }
 
 export function ErrorText({ message }: { message: string }) {
+  const t = useAppTheme();
   if (!message) return null;
-  return <Text style={styles.error}>{message}</Text>;
+  return <Text style={[styles.error, { color: t.danger }]}>{message}</Text>;
 }
 
 export function InfoText({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.info}>{children}</Text>;
+  const t = useAppTheme();
+  return <Text style={[styles.info, { color: t.textSecondary }]}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  button: {
-    borderRadius: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  primary: {
-    backgroundColor: PRIMARY_BLUE,
-  },
-  secondary: {
-    backgroundColor: '#EFF2FF',
-  },
-  danger: {
-    backgroundColor: '#FEE2E2',
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  secondaryText: {
-    color: PRIMARY_BLUE,
-  },
-  field: {
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
-    color: '#111827',
-    backgroundColor: '#FFFFFF',
-  },
-  multiline: {
-    minHeight: 72,
-    textAlignVertical: 'top',
-  },
-  error: {
-    color: '#DC2626',
-    fontSize: 13,
-    marginBottom: 10,
-  },
-  info: {
-    color: '#6B7280',
-    fontSize: 13,
-    lineHeight: 19,
-  },
+  card: { borderRadius: Radius.lg, padding: 18, marginBottom: 14, borderWidth: 1, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.06, shadowRadius: 16, elevation: 2 },
+  cardTitle: { fontSize: 17, fontWeight: '700', marginBottom: 12, letterSpacing: -0.2 },
+  button: { borderRadius: Radius.md, paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center', marginTop: 8 },
+  buttonText: { fontWeight: '700', fontSize: 15 },
+  field: { marginBottom: 12 },
+  label: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
+  input: { borderWidth: 1, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
+  multiline: { minHeight: 72, textAlignVertical: 'top' },
+  error: { fontSize: 13, marginBottom: 10 },
+  info: { fontSize: 13, lineHeight: 19 },
 });
