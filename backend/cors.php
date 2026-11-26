@@ -5,7 +5,7 @@ define('IPAY_ALLOWED_ORIGIN', getenv('IPAY_CORS_ORIGIN') ?: '*');
 function ipay_send_cors_headers(): void
 {
     header('Access-Control-Allow-Origin: ' . IPAY_ALLOWED_ORIGIN);
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Idempotency-Key');
     header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
     header('Access-Control-Max-Age: 86400');
     header('Access-Control-Allow-Credentials: false');

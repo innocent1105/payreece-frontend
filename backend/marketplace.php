@@ -1,0 +1,212 @@
+<?php
+require_once __DIR__ . '/cors.php';
+ipay_send_cors_headers();
+
+require_once __DIR__ . '/mm_core.php';
+require_once __DIR__ . '/mm_agents.php';
+require_once __DIR__ . '/mm_availability.php';
+require_once __DIR__ . '/mm_matching.php';
+require_once __DIR__ . '/mm_lifecycle.php';
+
+function mm_require_method(string $expected): void
+{
+    if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') !== $expected) {
+        mm_fail('Method not allowed.', 405, 'method_not_allowed');
+    }
+}
+
+try {
+    $user = mm_current_user($pdo);
+    $input = array_merge($_POST, ipay_json_input());
+    $action = trim((string)($_GET['action'] ?? $input['action'] ?? ''));
+
+    switch ($action) {
+        case 'networks':
+            mm_require_method('GET');
+            mm_ok([
+                'networks' => [
+                    ['code' => 'MTN', 'name' => 'MTN MoMo', 'color' => '#FFCC00'],
+                    ['code' => 'AIRTEL', 'name' => 'Airtel Money', 'color' => '#E4002B'],
+                    ['code' => 'ZAMTEL', 'name' => 'Zamtel Kwacha', 'color' => '#0057A8'],
+                ],
+                'min_amount' => mm_ngwee_to_decimal(mm_setting_money($pdo, 'min_amount', 1000)),
+                'max_amount' => mm_ngwee_to_decimal(mm_setting_money($pdo, 'max_amount', 500000)),
+                'disclaimer' => mm_setting($pdo, 'disclaimer', 'Payreece coordinates agents only. We do not send, hold, verify, or confirm mobile money.'),
+            ]);
+            break;
+
+        case 'agent.register':
+            mm_require_method('POST');
+            $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            if ($agent) {
+                mm_fail('An agent profile already exists for this account.', 409, 'agent_exists');
+            }
+            mm_ok(mm_save_agent_profile($pdo, $user, $input), 'Agent application submitted.');
+            break;
+
+        case 'agent.profile':
+            $agent = mm_require_agent($pdo, $user);
+            if ($action === 'agent.profile' && strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'PUT') {
+                mm_ok(mm_save_agent_profile($pdo, $user, $input), 'Agent profile updated.');
+            }
+            mm_require_method('GET');
+            mm_ok(mm_agent_payload($pdo, $agent, $user));
+            break;
+
+        case 'agent.liquidity':
+            mm_require_method('PUT');
+            $agent = mm_require_agent($pdo, $user);
+            mm_ok(mm_update_liquidity($pdo, $user, $agent, $input), 'Liquidity updated (agent-declared).');
+            break;
+
+        case 'agent.availability':
+            mm_require_method('PUT');
+            $agent = mm_require_agent($pdo, $user);
+            mm_ok(mm_set_availability($pdo, $user, $agent, (string)($input['availability'] ?? '')));
+            break;
+
+        case 'agent.location':
+            if (!in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST', 'PUT'], true)) {
+                mm_require_method('POST');
+            }
+            $agent = mm_require_agent($pdo, $user);
+            mm_ok(mm_update_location($pdo, $user, $agent, $input));
+            break;
+
+        case 'agent.earnings':
+            mm_require_method('GET');
+            $agent = mm_require_agent($pdo, $user);
+            mm_ok(mm_agent_earnings($pdo, $agent));
+            break;
+
+        case 'agent.document':
+            mm_require_method('GET');
+            mm_serve_private_image($pdo, $user, (string)($input['filename'] ?? $_GET['filename'] ?? ''));
+            break;
+
+        case 'admin.agents':
+            mm_require_method('GET');
+            mm_require_admin($user);
+            mm_ok(['agents' => mm_admin_agents($pdo, trim((string)($_GET['status'] ?? '')))]);
+            break;
+
+        case 'admin.agent_decision':
+            mm_require_method('POST');
+            mm_ok(mm_admin_agent_decision($pdo, $user, $input), 'Agent decision recorded.');
+            break;
+
+        case 'customer.request.create':
+            mm_require_method('POST');
+            mm_create_request($pdo, $user, $input, mm_request_header('Idempotency-Key'));
+            break;
+
+        case 'customer.request.status':
+            mm_require_method('GET');
+            $requestId = (int)($_GET['request_id'] ?? $input['request_id'] ?? 0);
+            $publicId = trim((string)($_GET['public_id'] ?? $input['public_id'] ?? ''));
+            $request = $requestId > 0
+                ? (function () use ($pdo, $requestId): ?array {
+                    $stmt = $pdo->prepare('SELECT * FROM mm_requests WHERE request_id = ? AND deleted_at IS NULL LIMIT 1');
+                    $stmt->execute([$requestId]);
+                    $row = $stmt->fetch();
+                    return $row ?: null;
+                })()
+                : ($publicId !== '' ? mm_request_by_public($pdo, $publicId) : null);
+            if (!$request) {
+                mm_fail('Request not found.', 404, 'request_not_found');
+            }
+            $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            $allowed = (int)$request['customer_id'] === (int)$user['user_id']
+                || mm_is_admin($user)
+                || ($agent && (int)($agent['agent_id'] ?? 0) > 0);
+            if (!$allowed) {
+                mm_fail('You cannot view this request.', 403, 'forbidden');
+            }
+            mm_ok(mm_request_payload($pdo, $request, $user));
+            break;
+
+        case 'customer.request.cancel':
+            mm_require_method('POST');
+            mm_cancel_request($pdo, $user, $input, mm_request_header('Idempotency-Key'));
+            break;
+
+        case 'agent.offers':
+            mm_require_method('GET');
+            $agent = mm_require_agent($pdo, $user);
+            mm_ok(['offers' => mm_agent_offers($pdo, $agent)]);
+            break;
+
+        case 'agent.offer.respond':
+            mm_require_method('POST');
+            $agent = mm_require_agent($pdo, $user);
+            mm_ok(mm_respond_offer($pdo, $user, $agent, $input));
+            break;
+
+        case 'cron.expire':
+            mm_require_method('POST');
+            $secret = (string)(getenv('IPAY_MM_CRON_SECRET') ?: '');
+            $provided = mm_request_header('X-Cron-Secret');
+            if ($secret === '' || !hash_equals($secret, $provided)) {
+                mm_fail('Cron secret is invalid.', 403, 'forbidden');
+            }
+            mm_ok(['processed' => mm_process_expirations($pdo)]);
+            break;
+
+        case 'transaction.get':
+            mm_require_method('GET');
+            $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            $tx = mm_require_transaction_access($pdo, (int)($_GET['transaction_id'] ?? $input['transaction_id'] ?? 0), $user, $agent);
+            mm_ok(mm_transaction_details($pdo, $tx, $user, $agent));
+            break;
+
+        case 'transaction.transition':
+            mm_require_method('POST');
+            $agent = mm_require_agent($pdo, $user);
+            mm_ok(mm_agent_transition($pdo, $user, $agent, $input));
+            break;
+
+        case 'transaction.confirm':
+            mm_require_method('POST');
+            $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            mm_ok(mm_confirm_transaction($pdo, $user, $agent, $input));
+            break;
+
+        case 'transaction.cancel':
+            mm_require_method('POST');
+            $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            mm_ok(mm_cancel_transaction($pdo, $user, $agent, $input));
+            break;
+
+        case 'transaction.dispute':
+            mm_require_method('POST');
+            $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            mm_ok(mm_dispute_transaction($pdo, $user, $agent, $input));
+            break;
+
+        case 'transaction.rate':
+            mm_require_method('POST');
+            $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            mm_ok(mm_rate_transaction($pdo, $user, $agent, $input));
+            break;
+
+        case 'admin.transactions':
+            mm_require_method('GET');
+            mm_require_admin($user);
+            mm_ok(['transactions' => mm_admin_transactions($pdo, trim((string)($_GET['status'] ?? '')))]);
+            break;
+
+        case 'admin.transaction.resolve':
+            mm_require_method('POST');
+            mm_ok(mm_admin_resolve_transaction($pdo, $user, $input));
+            break;
+
+        default:
+            mm_fail('Unknown marketplace action.', 404, 'not_found');
+    }
+} catch (Throwable $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    error_log('[marketplace] ' . $e->getMessage());
+    mm_fail('An internal server error occurred.', 500, 'internal_error');
+}
