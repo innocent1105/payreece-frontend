@@ -38,7 +38,10 @@ export default function TransactionsScreen() {
     finally { setLoading(false); setRefreshing(false); }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const timer = setTimeout(() => { void load(); }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: t.background }}>

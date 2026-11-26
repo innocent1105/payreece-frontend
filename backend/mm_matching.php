@@ -340,9 +340,11 @@ function mm_dispatch_next_offer(PDO $pdo, int $requestId, bool $alreadyInTransac
 function mm_agent_offers(PDO $pdo, array $agent): array
 {
     $stmt = $pdo->prepare("
-        SELECT o.*, r.direction, r.network, r.amount, r.pickup_address, r.pickup_lat, r.pickup_lng
+        SELECT o.*, r.direction, r.network, r.amount, r.pickup_address, r.pickup_lat, r.pickup_lng,
+               u.fullname AS customer_name, u.avatar AS customer_avatar, u.phone_number AS customer_phone
         FROM mm_offers o
         JOIN mm_requests r ON r.request_id = o.request_id
+        JOIN users u ON u.user_id = r.customer_id
         WHERE o.agent_id = ? AND o.state = 'offered' AND o.expires_at > NOW()
         ORDER BY o.expires_at ASC
     ");
@@ -362,6 +364,11 @@ function mm_agent_offers(PDO $pdo, array $agent): array
             'pickup_address' => $row['pickup_address'],
             'pickup_lat' => $row['pickup_lat'],
             'pickup_lng' => $row['pickup_lng'],
+            'customer' => [
+                'name' => $row['customer_name'],
+                'avatar' => $row['customer_avatar'],
+                'phone' => $row['customer_phone'],
+            ],
             'expires_at' => $row['expires_at'],
         ];
     }

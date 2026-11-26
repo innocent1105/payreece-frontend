@@ -31,17 +31,36 @@ function mm_transaction_details(PDO $pdo, array $tx, array $user, ?array $agent)
     $payload = mm_transaction_public($pdo, $tx, $user);
     $payload['location'] = mm_location_for_transaction($pdo, $tx, $viewerRole);
     $payload['route'] = null;
-    if ($viewerRole === 'customer' && $tx['agent_id'] && $payload['location']) {
-        $stmt = $pdo->prepare('SELECT lat, lng FROM agent_profiles WHERE agent_id = ? LIMIT 1');
+    if ($tx['agent_id'] && $payload['location']) {
+        $stmt = $pdo->prepare('SELECT lat, lng FROM agent_locations WHERE agent_id = ? LIMIT 1');
         $stmt->execute([$tx['agent_id']]);
-        $agentHome = $stmt->fetch();
+        $agentLive = $stmt->fetch();
+        if (!$agentLive) {
+            $stmt = $pdo->prepare('SELECT lat, lng FROM agent_profiles WHERE agent_id = ? LIMIT 1');
+            $stmt->execute([$tx['agent_id']]);
+            $agentLive = $stmt->fetch();
+        }
         $stmt = $pdo->prepare('SELECT pickup_lat, pickup_lng FROM mm_requests WHERE request_id = ? LIMIT 1');
         $stmt->execute([$tx['request_id']]);
         $pickup = $stmt->fetch();
-        if ($agentHome && $pickup) {
-            $payload['route'] = mm_route($pdo, (float)$agentHome['lat'], (float)$agentHome['lng'], (float)$pickup['pickup_lat'], (float)$pickup['pickup_lng']);
+        if ($agentLive && $pickup) {
+            $agentPoint = [(float)$agentLive['lat'], (float)$agentLive['lng']];
+            $pickupPoint = [(float)$pickup['pickup_lat'], (float)$pickup['pickup_lng']];
+            if ($viewerRole === 'agent') {
+                $payload['route'] = mm_route($pdo, $pickupPoint[0], $pickupPoint[1], $agentPoint[0], $agentPoint[1]);
+            } else {
+                $payload['route'] = mm_route($pdo, $agentPoint[0], $agentPoint[1], $pickupPoint[0], $pickupPoint[1]);
+            }
         }
     }
+    $stmt = $pdo->prepare('SELECT meeting_id, distance_m, met_at FROM mm_meetings WHERE transaction_id = ? LIMIT 1');
+    $stmt->execute([$tx['transaction_id']]);
+    $meetingRow = $stmt->fetch();
+    $payload['meeting'] = $meetingRow ? [
+        'meeting_id' => (int)$meetingRow['meeting_id'],
+        'distance_m' => (float)$meetingRow['distance_m'],
+        'met_at' => $meetingRow['met_at'],
+    ] : null;
     $payload['timeline'] = [
         'accepted_at' => $tx['accepted_at'],
         'en_route_at' => $tx['en_route_at'],

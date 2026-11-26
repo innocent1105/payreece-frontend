@@ -58,6 +58,7 @@ export default function AccountScreen() {
   const insets = useSafeAreaInsets();
   const { preference } = useThemePreference();
   const [profile, setProfile] = useState<any>(null);
+  const role = profile?.marketplace_role ?? profile?.role ?? 'user';
 
   useEffect(() => {
     (async () => {
@@ -91,6 +92,19 @@ export default function AccountScreen() {
               <Text style={[styles.cardTitle, { color: t.textSecondary }]}>Appearance</Text>
               <Text style={[styles.cardSub, { color: t.textMuted }]}>Choose how Payreece looks. System follows your device setting.</Text>
               <ThemeSelector />
+            </GlassCard>
+          </Animated.View>
+
+          <Animated.View entering={FadeInDown.delay(100).duration(380)}>
+            <GlassCard style={styles.card}>
+              <Text style={[styles.cardTitle, { color: t.textSecondary }]}>Account type</Text>
+              <Row icon={role === 'agent' ? 'storefront-outline' : 'person-outline'} label={role === 'agent' ? 'Agent' : 'User'} value={role === 'agent' ? 'Can serve requests' : 'Can request agents'} />
+              <View style={[styles.divider, { backgroundColor: t.border }]} />
+              <Row
+                icon="swap-horizontal-outline"
+                label={role === 'agent' ? 'Agent dashboard' : 'Become an agent'}
+                onPress={() => router.push(role === 'agent' ? '/agent/dashboard' : '/agent/onboarding')}
+              />
             </GlassCard>
           </Animated.View>
 

@@ -3,7 +3,7 @@
 function ipay_transaction_payload(PDO $pdo, string $token, int $limit = 0): array
 {
     $stmt = $pdo->prepare("
-        SELECT user_id, public_id, username, fullname, email, phone_number, student_id, account_type, gender, avatar
+        SELECT user_id, public_id, username, fullname, email, phone_number, student_id, account_type, marketplace_role, gender, avatar
         FROM users
         WHERE public_id = ?
         LIMIT 1
@@ -80,6 +80,8 @@ function ipay_transaction_payload(PDO $pdo, string $token, int $limit = 0): arra
         'email'        => $user['email'],
         'student_id'   => $user['student_id'] ?? '',
         'account_type' => $user['account_type'],
+        'marketplace_role' => $user['marketplace_role'] ?? 'user',
+        'role'         => $user['marketplace_role'] ?? 'user',
         'gender'       => $user['gender'],
         'avatar'       => $user['avatar'] ?: 'avatar1.jpg',
         'wallet' => [

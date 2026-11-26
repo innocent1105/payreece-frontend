@@ -40,13 +40,6 @@ export default function EditProfile() {
     } catch {} finally { setSaving(false); }
   };
 
-  const Field = ({ label, keyName, ...rest }: any) => (
-    <View style={{ marginBottom: 14 }}>
-      <Text style={[styles.label, { color: t.textSecondary }]}>{label}</Text>
-      <TextInput style={[styles.input, { backgroundColor: t.inputBg, borderColor: t.inputBorder, color: t.text }]} value={form[keyName]} onChangeText={(v) => setForm((f: any) => ({ ...f, [keyName]: v }))} placeholderTextColor={t.textMuted} {...rest} />
-    </View>
-  );
-
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: t.background }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} showsVerticalScrollIndicator={false}>
@@ -60,9 +53,9 @@ export default function EditProfile() {
             <Text style={{ color: t.textSecondary, marginTop: 10 }}>{form.phone_number}</Text>
           </GlassCard>
           <GlassCard>
-            <Field label="Full name" keyName="full_name" />
-            <Field label="Username" keyName="username" autoCapitalize="none" />
-            <Field label="Email" keyName="email" keyboardType="email-address" autoCapitalize="none" />
+            <ProfileField label="Full name" keyName="full_name" value={form.full_name} colors={t} onChangeText={(key: string, value: string) => setForm((f: any) => ({ ...f, [key]: value }))} />
+            <ProfileField label="Username" keyName="username" value={form.username} colors={t} onChangeText={(key: string, value: string) => setForm((f: any) => ({ ...f, [key]: value }))} autoCapitalize="none" />
+            <ProfileField label="Email" keyName="email" value={form.email} colors={t} onChangeText={(key: string, value: string) => setForm((f: any) => ({ ...f, [key]: value }))} keyboardType="email-address" autoCapitalize="none" />
             <Text style={[styles.label, { color: t.textSecondary }]}>Gender</Text>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
               {['male', 'female'].map(g => {
@@ -75,6 +68,21 @@ export default function EditProfile() {
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+  );
+}
+
+function ProfileField({ label, keyName, value, colors, onChangeText, ...rest }: any) {
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>
+      <TextInput
+        style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder, color: colors.text }]}
+        value={value}
+        onChangeText={(v) => onChangeText(keyName, v)}
+        placeholderTextColor={colors.textMuted}
+        {...rest}
+      />
+    </View>
   );
 }
 

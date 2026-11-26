@@ -3,6 +3,7 @@ import { registerForPushNotifications } from '@/components/lib/notifications';
 import { BASE_URL } from '@/constants/api';
 import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 
 export async function setupMarketplacePush(): Promise<() => void> {
   Notifications.setNotificationHandler({
@@ -25,7 +26,16 @@ export async function setupMarketplacePush(): Promise<() => void> {
       return;
     }
     if (data.request_id) {
-      router.push('/marketplace/request');
+      SecureStore.getItemAsync('marketplace_active_request')
+        .then((stored) => {
+          const active = stored ? JSON.parse(stored) : null;
+          if (active?.transactionId) {
+            router.push({ pathname: '/marketplace/map', params: { transaction_id: String(active.transactionId), role: 'customer' } });
+          } else {
+            router.push('/marketplace');
+          }
+        })
+        .catch(() => router.push('/marketplace'));
     }
   });
 

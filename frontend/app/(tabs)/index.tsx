@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -83,7 +83,14 @@ export default function HomeScreen() {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { void fetchDashboard(); void syncContacts(); const i = setInterval(fetchDashboard, 60000); return () => clearInterval(i); }, []);
+  const fetchDashboardRef = useRef(fetchDashboard);
+  const syncContactsRef = useRef(syncContacts);
+
+  useEffect(() => {
+    const timer = setTimeout(() => { void fetchDashboardRef.current(); void syncContactsRef.current(); }, 0);
+    const i = setInterval(() => { void fetchDashboardRef.current(); }, 60000);
+    return () => { clearTimeout(timer); clearInterval(i); };
+  }, []);
   const onRefresh = async () => { setRefreshing(true); await fetchDashboard(); setRefreshing(false); };
 
   const goSend = (c: any) => router.push({ pathname: '/send_funds', params: { id: c.public_id, name: c.fullname, phone_number: c.phone_number, avatar: c.avatar } });
@@ -196,9 +203,9 @@ const styles = StyleSheet.create({
   actionItem: { alignItems: 'center', gap: 8, flex: 1 },
   actionIcon: { width: 52, height: 52, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   actionLabel: { color: 'rgba(255,255,255,0.88)', fontSize: 12, fontWeight: '600' },
-  body: { padding: 20, gap: 14, marginTop: -14 },
-  sectionCard: { padding: 2 },
-  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 10, paddingTop: 10, paddingBottom: 12 },
+  body: { padding: 4, paddingTop: 20, gap: 14, marginTop: -14 },
+  sectionCard: { },
+  sectionHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom : 10},
   sectionTitle: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
   peopleRow: { paddingHorizontal: 10, paddingBottom: 10, gap: 16 },
   person: { alignItems: 'center', width: 60, gap: 8 },

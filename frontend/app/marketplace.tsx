@@ -1,14 +1,16 @@
+import PaySheet from '@/components/marketplace/PaySheet';
 import { SectionCard, InfoText, PrimaryButton } from '@/components/marketplace/ui';
 import { ScreenHero } from '@/components/ui/screen-hero';
 import { useAppTheme } from '@/hooks/use-theme-color';
 import { router } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Marketplace() {
   const t = useAppTheme();
   const insets = useSafeAreaInsets();
+  const [payVisible, setPayVisible] = useState(false);
   const chips = ['MTN', 'Airtel', 'Zamtel'];
   return (
     <View style={{ flex: 1, backgroundColor: t.background }}>
@@ -16,7 +18,7 @@ export default function Marketplace() {
       <ScrollView contentContainerStyle={{ padding: 20, marginTop: -24, paddingBottom: insets.bottom + 24 }}>
         <SectionCard title="For customers">
           <InfoText>Request a nearby mobile money agent to withdraw or deposit cash.</InfoText>
-          <PrimaryButton label="Request an agent" onPress={() => router.push('/marketplace/request')} />
+          <PrimaryButton label="Request an agent" onPress={() => setPayVisible(true)} />
         </SectionCard>
         <SectionCard title="For agents">
           <InfoText>Go online, receive requests, and manage your earnings.</InfoText>
@@ -26,6 +28,7 @@ export default function Marketplace() {
           <View style={styles.row}>{chips.map(c => <View key={c} style={[styles.chip, { backgroundColor: t.accentSoftBg, borderColor: t.border }]}><Text style={{ color: t.tint, fontWeight: '600' }}>{c}</Text></View>)}</View>
         </SectionCard>
       </ScrollView>
+      <PaySheet visible={payVisible} onClose={() => setPayVisible(false)} />
     </View>
   );
 }

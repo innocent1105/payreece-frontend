@@ -7,11 +7,10 @@ const ACTIVE_COLOR = '#2A2A68'; // Primary app color (Dark Blue)
 const BORDER_COLOR = '#B0C4DE'; // Light border color
 
 // --- 1. ENTER PASSWORD CARD COMPONENT ---
-export default function EnterPasswordCard({ }) {
+export default function EnterPasswordCard() {
     
     const [password, setPassword] = useState('');
     const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-    const isButtonDisabled = password.length < 4; // Simple check for a minimum PIN/password length
 
     return (
         // The modal overlay wrapper (if this component is used as a full-screen modal)

@@ -12,9 +12,13 @@ $phone      = trim((string)($input['mobile_number'] ?? ''));
 $password   = trim((string)($input['password'] ?? ''));
 $gender     = strtolower(trim((string)($input['gender'] ?? 'other')));
 $expo_token = trim((string)($input['expo_token'] ?? ''));
+$role = strtolower(trim((string)($input['role'] ?? $input['account_type'] ?? 'user')));
 
 if (!in_array($gender, ['male', 'female', 'other'], true)) {
     $gender = 'other';
+}
+if (!in_array($role, ['user', 'agent'], true)) {
+    $role = 'user';
 }
 
 if (mb_strlen($fullname) < 4 || strlen($phone) < 10 || strlen($password) !== 6) {
@@ -38,8 +42,8 @@ try {
 
     $stmt = $pdo->prepare("
         INSERT INTO users (
-            public_id, username, fullname, phone_number, password, email, gender, expo_push_token, avatar
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            public_id, username, fullname, phone_number, password, email, gender, expo_push_token, avatar, marketplace_role
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     $stmt->execute([
         $publicId,
@@ -50,7 +54,8 @@ try {
         $email,
         $gender,
         $expo_token,
-        $avatar
+        $avatar,
+        $role
     ]);
 
     $userId = $pdo->lastInsertId();

@@ -423,8 +423,8 @@ function mm_transaction_state_map(): array
 {
     return [
         'searching' => ['accepted' => ['agent', 'system'], 'cancelled' => ['customer', 'system', 'admin'], 'expired' => ['system'], 'rejected' => ['agent', 'system']],
-        'accepted' => ['agent_en_route' => ['agent'], 'cancelled' => ['customer', 'agent'], 'disputed' => ['customer', 'agent', 'system', 'admin']],
-        'agent_en_route' => ['arrived' => ['agent'], 'cancelled' => ['customer', 'agent'], 'disputed' => ['customer', 'agent', 'system', 'admin']],
+        'accepted' => ['agent_en_route' => ['agent'], 'arrived' => ['system', 'agent'], 'cancelled' => ['customer', 'agent'], 'disputed' => ['customer', 'agent', 'system', 'admin']],
+        'agent_en_route' => ['arrived' => ['agent', 'system'], 'cancelled' => ['customer', 'agent'], 'disputed' => ['customer', 'agent', 'system', 'admin']],
         'arrived' => ['processing' => ['agent'], 'cancelled' => ['customer', 'agent'], 'disputed' => ['customer', 'agent', 'system', 'admin']],
         'processing' => ['completed' => ['system', 'admin'], 'cancelled' => ['admin'], 'disputed' => ['customer', 'agent', 'system', 'admin']],
         'disputed' => ['completed' => ['admin'], 'cancelled' => ['admin']],
@@ -816,9 +816,19 @@ function mm_transaction_public(PDO $pdo, array $tx, array $viewer): array
         $agent = $stmt->fetch();
     }
 
-    $stmt = $pdo->prepare('SELECT fullname, phone_number FROM users WHERE user_id = ? LIMIT 1');
+    $stmt = $pdo->prepare('SELECT fullname, phone_number, avatar FROM users WHERE user_id = ? LIMIT 1');
     $stmt->execute([$tx['customer_id']]);
     $customer = $stmt->fetch();
+
+    $myRating = null;
+    if ($isCustomer) {
+        $stmt = $pdo->prepare('SELECT rating, comment FROM mm_ratings WHERE transaction_id = ? AND customer_id = ? LIMIT 1');
+        $stmt->execute([$tx['transaction_id'], $tx['customer_id']]);
+        $row = $stmt->fetch();
+        if ($row) {
+            $myRating = ['rating' => (int)$row['rating'], 'comment' => $row['comment']];
+        }
+    }
 
     return [
         'transaction_id' => (int)$tx['transaction_id'],
@@ -840,13 +850,16 @@ function mm_transaction_public(PDO $pdo, array $tx, array $viewer): array
             'business_name' => $agent['business_name'],
             'avatar' => $agent['avatar'],
             'rating' => $agent['rating_avg'],
+            'rating_count' => (int)$agent['rating_count'],
             'vehicle_description' => $agent['vehicle_description'],
             'phone' => $tx['state'] === 'searching' ? null : $agent['phone_number'],
         ] : null,
         'customer' => [
             'name' => $customer['fullname'] ?: 'Customer',
             'phone' => $agent !== null && $isCustomer === false ? ($customer['phone_number'] ?? null) : null,
+            'avatar' => $customer['avatar'] ?? null,
         ],
+        'my_rating' => $myRating,
     ];
 }
 

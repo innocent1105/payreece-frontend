@@ -1,4 +1,4 @@
-﻿import { getToken } from '@/components/auth/auth';
+import { getToken } from '@/components/auth/auth';
 import LoadingScreen from '@/components/loading';
 import { setupMarketplacePush } from '@/components/lib/push-setup';
 import { ThemePreferenceProvider, useThemePreference } from '@/contexts/theme-preference';
@@ -81,7 +81,7 @@ function RootLayoutNav() {
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
-        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} translucent />
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       </View>
     </ThemeProvider>
   );

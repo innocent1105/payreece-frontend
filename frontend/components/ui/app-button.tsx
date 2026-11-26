@@ -1,6 +1,6 @@
-﻿import React from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, type ViewStyle, type StyleProp } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '@/hooks/use-theme-color';
 import { Radius } from '@/constants/theme';
@@ -19,8 +19,8 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function AppButton({ label, onPress, disabled, loading, variant = 'primary', style, icon }: Props) {
   const t = useAppTheme();
-  const scale = useSharedValue(1);
-  const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const [pressed, setPressed] = useState(false);
+  const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: withTiming(pressed ? 0.985 : 1, { duration: pressed ? 120 : 180 }) }] }));
   const isDisabled = disabled || loading;
 
   const colors =
@@ -36,8 +36,8 @@ export function AppButton({ label, onPress, disabled, loading, variant = 'primar
     <AnimatedPressable
       onPress={onPress}
       disabled={isDisabled}
-      onPressIn={() => { scale.value = withTiming(0.985, { duration: 120 }); }}
-      onPressOut={() => { scale.value = withTiming(1, { duration: 180 }); }}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
       style={[aStyle, style, { opacity: isDisabled ? 0.5 : 1 }]}
     >
       <LinearGradient

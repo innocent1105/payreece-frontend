@@ -1,5 +1,5 @@
-﻿import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+
 import React from 'react';
 import { Platform, StyleSheet, View, type ViewProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   highlight: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 1,
     opacity: 0.35,
   },

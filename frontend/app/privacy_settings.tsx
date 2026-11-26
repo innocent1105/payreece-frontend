@@ -13,23 +13,13 @@ export default function PrivacySettings() {
   const [biometric, setBiometric] = useState(true);
   const [activity, setActivity] = useState(true);
 
-  const Row = ({ label, sub, value, onValueChange }: any) => (
-    <View style={[styles.row, { borderBottomColor: t.border }]}>
-      <View style={{ flex: 1, paddingRight: 16 }}>
-        <Text style={{ color: t.text, fontSize: 16, fontWeight: '600' }}>{label}</Text>
-        <Text style={{ color: t.textSecondary, fontSize: 13, marginTop: 3, lineHeight: 18 }}>{sub}</Text>
-      </View>
-      <Switch value={value} onValueChange={onValueChange} trackColor={{ false: t.border, true: t.tint }} thumbColor="#fff" />
-    </View>
-  );
-
   return (
     <View style={{ flex: 1, backgroundColor: t.background }}>
       <ScreenHero title="Privacy" onBack={() => router.back()} compact />
       <ScrollView contentContainerStyle={{ padding: 20, marginTop: -24, paddingBottom: insets.bottom + 24 }}>
         <GlassCard style={{ padding: 6 }}>
-          <Row label="Public profile" sub="Allow others to find you by username." value={publicProfile} onValueChange={setPublicProfile} />
-          <Row label="Biometric unlock" sub="Use Face ID or fingerprint for sensitive actions." value={biometric} onValueChange={setBiometric} />
+          <SettingRow label="Public profile" sub="Allow others to find you by username." value={publicProfile} onValueChange={setPublicProfile} colors={t} />
+          <SettingRow label="Biometric unlock" sub="Use Face ID or fingerprint for sensitive actions." value={biometric} onValueChange={setBiometric} colors={t} />
           <View style={[styles.row, { borderBottomWidth: 0 }]}>
             <View style={{ flex: 1, paddingRight: 16 }}>
               <Text style={{ color: t.text, fontSize: 16, fontWeight: '600' }}>Activity status</Text>
@@ -42,4 +32,16 @@ export default function PrivacySettings() {
     </View>
   );
 }
+function SettingRow({ label, sub, value, onValueChange, colors }: any) {
+  return (
+    <View style={[styles.row, { borderBottomColor: colors.border }]}>
+      <View style={{ flex: 1, paddingRight: 16 }}>
+        <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{label}</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 13, marginTop: 3, lineHeight: 18 }}>{sub}</Text>
+      </View>
+      <Switch value={value} onValueChange={onValueChange} trackColor={{ false: colors.border, true: colors.tint }} thumbColor="#fff" />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({ row: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: StyleSheet.hairlineWidth } });

@@ -13,6 +13,7 @@ import { GlassCard } from '@/components/ui/glass-card';
 import { Radius } from '@/constants/theme';
 
 type Gender = 'male' | 'female' | '';
+type Role = 'user' | 'agent';
 
 export default function RegisterScreen() {
   const t = useAppTheme();
@@ -20,6 +21,7 @@ export default function RegisterScreen() {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState<Gender>('');
+  const [role, setRole] = useState<Role>('user');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,19 +33,16 @@ export default function RegisterScreen() {
     if (!valid) { setError('Please complete all fields correctly.'); return; }
     setLoading(true); setError('');
     try {
-      const res = await axios.post(`${BASE_URL}/register.php`, { username: fullName.trim(), mobile_number: phone.trim(), gender, password }, { timeout: 10000 });
+      const res = await axios.post(`${BASE_URL}/register.php`, { username: fullName.trim(), mobile_number: phone.trim(), gender, password, role }, { timeout: 10000 });
       if (res.data?.success) router.push('/login');
       else setError(res.data?.message || 'Registration failed.');
-    } catch { setError('Unable to register right now. Please try again.'); }
+    } catch (e: any) {
+      const message = e?.response?.data?.message
+        || (e?.code === 'ECONNABORTED' ? 'The server took too long to respond. Please try again.' : e?.message);
+      setError(message || 'Unable to register right now. Please try again.');
+    }
     finally { setLoading(false); }
   };
-
-  const Field = ({ icon, placeholder, value, onChangeText, keyboardType, secureTextEntry, maxLength }: any) => (
-    <View style={[styles.inputWrap, { backgroundColor: t.inputBg, borderColor: t.inputBorder }]}>
-      <Ionicons name={icon} size={20} color={t.textMuted} />
-      <TextInput style={[styles.input, { color: t.text }]} placeholder={placeholder} placeholderTextColor={t.textMuted} value={value} onChangeText={onChangeText} keyboardType={keyboardType} secureTextEntry={secureTextEntry} maxLength={maxLength} />
-    </View>
-  );
 
   return (
     <View style={{ flex: 1, backgroundColor: t.background }}>
@@ -58,8 +57,27 @@ export default function RegisterScreen() {
           <Animated.View entering={FadeInDown.delay(80).duration(400)}>
             <GlassCard style={styles.card}>
               {error ? <View style={[styles.errorBox, { backgroundColor: t.dangerSoft, borderColor: t.danger }]}><Text style={{ color: t.danger }}>{error}</Text></View> : null}
-              <Field icon="person-outline" placeholder="Full name" value={fullName} onChangeText={setFullName} />
-              <Field icon="call-outline" placeholder="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={15} />
+              <Field icon="person-outline" placeholder="Full name" value={fullName} onChangeText={setFullName} colors={t} />
+              <Field icon="call-outline" placeholder="Mobile number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={15} colors={t} />
+              <Text style={[styles.label, { color: t.textSecondary }]}>Account type</Text>
+              <View style={styles.genderRow}>
+                {([
+                  { key: 'user', label: 'User', icon: 'person-outline' },
+                  { key: 'agent', label: 'Agent', icon: 'storefront-outline' },
+                ] as const).map((item) => {
+                  const active = role === item.key;
+                  return (
+                    <Pressable
+                      key={item.key}
+                      onPress={() => setRole(item.key)}
+                      style={[styles.genderBtn, { backgroundColor: active ? t.accentSoftBg : t.inputBg, borderColor: active ? t.tint : t.inputBorder }]}
+                    >
+                      <Ionicons name={item.icon} size={17} color={active ? t.tint : t.textMuted} />
+                      <Text style={{ color: active ? t.tint : t.textSecondary, fontWeight: '700', marginTop: 4 }}>{item.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               <Text style={[styles.label, { color: t.textSecondary }]}>Gender</Text>
               <View style={styles.genderRow}>
                 {(['male', 'female'] as const).map(g => {
@@ -71,8 +89,8 @@ export default function RegisterScreen() {
                   );
                 })}
               </View>
-              <Field icon="key-outline" placeholder="Create 6-digit PIN" value={password} onChangeText={setPassword} keyboardType="numeric" secureTextEntry maxLength={6} />
-              <Field icon="lock-closed-outline" placeholder="Confirm PIN" value={confirm} onChangeText={setConfirm} keyboardType="numeric" secureTextEntry maxLength={6} />
+              <Field icon="key-outline" placeholder="Create 6-digit PIN" value={password} onChangeText={setPassword} keyboardType="numeric" secureTextEntry maxLength={6} colors={t} />
+              <Field icon="lock-closed-outline" placeholder="Confirm PIN" value={confirm} onChangeText={setConfirm} keyboardType="numeric" secureTextEntry maxLength={6} colors={t} />
               {password.length > 0 && confirm.length > 0 && password !== confirm ? <Text style={{ color: t.danger, marginBottom: 10, fontSize: 13 }}>PINs do not match.</Text> : null}
               <AppButton label="Create account" onPress={onRegister} loading={loading} disabled={!valid} />
               <View style={styles.footerRow}>
@@ -83,6 +101,24 @@ export default function RegisterScreen() {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+function Field({ icon, placeholder, value, onChangeText, keyboardType, secureTextEntry, maxLength, colors }: any) {
+  return (
+    <View style={[styles.inputWrap, { backgroundColor: colors.inputBg, borderColor: colors.inputBorder }]}>
+      <Ionicons name={icon} size={20} color={colors.textMuted} />
+      <TextInput
+        style={[styles.input, { color: colors.text }]}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textMuted}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType}
+        secureTextEntry={secureTextEntry}
+        maxLength={maxLength}
+      />
     </View>
   );
 }

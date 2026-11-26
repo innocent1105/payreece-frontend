@@ -34,7 +34,9 @@ export default function LoginScreen() {
         router.replace('/');
       } else setError(res.data?.message || 'Unable to sign in.');
     } catch (e: any) {
-      setError(e?.response?.data?.message || 'Network error. Please try again.');
+      const message = e?.response?.data?.message
+        || (e?.code === 'ECONNABORTED' ? 'The server took too long to respond. Please try again.' : e?.message);
+      setError(message || 'Network error. Please try again.');
     } finally { setLoading(false); }
   };
 

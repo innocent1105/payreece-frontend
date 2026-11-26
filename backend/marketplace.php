@@ -7,6 +7,7 @@ require_once __DIR__ . '/mm_agents.php';
 require_once __DIR__ . '/mm_availability.php';
 require_once __DIR__ . '/mm_matching.php';
 require_once __DIR__ . '/mm_lifecycle.php';
+require_once __DIR__ . '/mm_discovery.php';
 
 function mm_require_method(string $expected): void
 {
@@ -21,6 +22,36 @@ try {
     $action = trim((string)($_GET['action'] ?? $input['action'] ?? ''));
 
     switch ($action) {
+        case 'account.role':
+            $stmt = $pdo->prepare('SELECT marketplace_role FROM users WHERE user_id = ? LIMIT 1');
+            $stmt->execute([(int)$user['user_id']]);
+            $role = (string)($stmt->fetchColumn() ?: 'user');
+            if (strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'PUT') {
+                $requested = strtolower(trim((string)($input['role'] ?? '')));
+                if (!in_array($requested, ['user', 'agent'], true)) {
+                    mm_fail('Role must be user or agent.', 400, 'invalid_role');
+                }
+                if ($requested === 'agent' && !mm_agent_for_user($pdo, (int)$user['user_id'])) {
+                    mm_fail('Complete the agent profile before switching roles.', 409, 'agent_profile_required');
+                }
+                if ($requested === 'user') {
+                    $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+                    if ($agent && mm_has_active_job($pdo, (int)$agent['agent_id'])) {
+                        mm_fail('Finish your active agent job before switching roles.', 409, 'active_job_exists');
+                    }
+                }
+                $stmt = $pdo->prepare('UPDATE users SET marketplace_role = ? WHERE user_id = ?');
+                $stmt->execute([$requested, (int)$user['user_id']]);
+                $role = $requested;
+            } else {
+                mm_require_method('GET');
+            }
+            mm_ok([
+                'role' => $role,
+                'is_agent' => $role === 'agent' && mm_agent_for_user($pdo, (int)$user['user_id']) !== null,
+            ]);
+            break;
+
         case 'networks':
             mm_require_method('GET');
             mm_ok([
@@ -35,13 +66,34 @@ try {
             ]);
             break;
 
+        case 'customer.location':
+            if (!in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST', 'PUT'], true)) {
+                mm_require_method('POST');
+            }
+            mm_ok(mm_update_customer_location($pdo, $user, $input), 'Location updated.');
+            break;
+
+        case 'customer.nearby_agents':
+            mm_require_method('GET');
+            mm_ok(mm_nearby_agents($pdo, $user, [
+                'lat' => $_GET['lat'] ?? $input['lat'] ?? null,
+                'lng' => $_GET['lng'] ?? $input['lng'] ?? null,
+                'network' => $_GET['network'] ?? $input['network'] ?? '',
+                'direction' => $_GET['direction'] ?? $input['direction'] ?? '',
+                'amount' => $_GET['amount'] ?? $input['amount'] ?? null,
+            ]));
+            break;
+
         case 'agent.register':
             mm_require_method('POST');
             $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
             if ($agent) {
                 mm_fail('An agent profile already exists for this account.', 409, 'agent_exists');
             }
-            mm_ok(mm_save_agent_profile($pdo, $user, $input), 'Agent application submitted.');
+            $profile = mm_save_agent_profile($pdo, $user, $input);
+            $stmt = $pdo->prepare("UPDATE users SET marketplace_role = 'agent' WHERE user_id = ?");
+            $stmt->execute([(int)$user['user_id']]);
+            mm_ok($profile, 'Agent application submitted.');
             break;
 
         case 'agent.profile':
@@ -116,9 +168,15 @@ try {
                 mm_fail('Request not found.', 404, 'request_not_found');
             }
             $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+            $assignedAgent = false;
+            if ($agent) {
+                $stmt = $pdo->prepare('SELECT 1 FROM mm_transactions WHERE request_id = ? AND agent_id = ? LIMIT 1');
+                $stmt->execute([(int)$request['request_id'], (int)$agent['agent_id']]);
+                $assignedAgent = (bool)$stmt->fetchColumn();
+            }
             $allowed = (int)$request['customer_id'] === (int)$user['user_id']
                 || mm_is_admin($user)
-                || ($agent && (int)($agent['agent_id'] ?? 0) > 0);
+                || $assignedAgent;
             if (!$allowed) {
                 mm_fail('You cannot view this request.', 403, 'forbidden');
             }
@@ -157,6 +215,11 @@ try {
             $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
             $tx = mm_require_transaction_access($pdo, (int)($_GET['transaction_id'] ?? $input['transaction_id'] ?? 0), $user, $agent);
             mm_ok(mm_transaction_details($pdo, $tx, $user, $agent));
+            break;
+
+        case 'transaction.meet':
+            mm_require_method('POST');
+            mm_ok(mm_check_meeting($pdo, $user, $input));
             break;
 
         case 'transaction.transition':

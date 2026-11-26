@@ -3,7 +3,8 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs } from 'expo-router';
-import React from 'react';
+import PaySheet from '@/components/marketplace/PaySheet';
+import React, { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Radius } from '@/constants/theme';
@@ -24,6 +25,7 @@ type TabBarProps = {
 function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }: TabBarProps) {
   const t = useAppTheme();
   const insets = useSafeAreaInsets();
+  const [payVisible, setPayVisible] = useState(false);
 
   const handlePress = (route: TabRoute, isFocused: boolean) => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -66,7 +68,7 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
             return (
               <Pressable
                 key={route.key}
-                onPress={() => handlePress(route, isFocused)}
+                onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); setPayVisible(true); }}
                 accessibilityRole="tab"
                 accessibilityLabel={label}
                 accessibilityState={{ selected: isFocused }}
@@ -100,6 +102,7 @@ function CustomTabBar({ state, descriptors, emitter, navigateToTab, navigation }
           );
         })}
       </View>
+      <PaySheet visible={payVisible} onClose={() => setPayVisible(false)} />
     </View>
   );
 }

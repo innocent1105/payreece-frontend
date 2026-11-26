@@ -1,9 +1,10 @@
 import Constants from 'expo-constants';
 
-const DEFAULT_API_URL = 'http://192.168.1.81/ipay/backend';
+const DEFAULT_API_URL = 'http://localhost/ipay/backend';
 
 function normalizeUrl(url: string): string {
-  return url.replace(/\/+$/, '').replace(/\/backend\/+$/i, '/backend');
+  const trimmed = url.replace(/\/+$/, '');
+  return /\/backend$/i.test(trimmed) ? trimmed : `${trimmed}/backend`;
 }
 
 function resolveApiUrl(): string {

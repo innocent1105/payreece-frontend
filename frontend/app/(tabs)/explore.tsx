@@ -42,12 +42,12 @@ export default function ExploreScreen() {
       const id = setTimeout(() => { if (mounted) { setUsers([]); setVerifying(false); } }, 0);
       return () => { mounted = false; clearTimeout(id); };
     }
-    setVerifying(true);
+    const verifyTimer = setTimeout(() => { if (mounted) setVerifying(true); }, 0);
     axios.post(`${BASE_URL}/verify_number.php`, { phone_number: search }, { timeout: 10000 })
       .then(res => { if (mounted && res.data?.success) setUsers(res.data.users || []); else if (mounted) setUsers([]); })
       .catch(() => { if (mounted) setUsers([]); })
       .finally(() => { if (mounted) setVerifying(false); });
-    return () => { mounted = false; };
+    return () => { mounted = false; clearTimeout(verifyTimer); };
   }, [search]);
 
   const network = (phone: string) => {
