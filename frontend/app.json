@@ -1,0 +1,68 @@
+{
+  "expo": {
+    "name": "Payreece.",
+    "slug": "Payreece",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/logo.jpg",
+    "scheme": "Payreece",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSContactsUsageDescription": "We use your contacts to help you send money faster.",
+        "NSLocationWhenInUseUsageDescription": "Payreece uses your location while the app is open to find nearby agents and share your position during an active job."
+      }
+    },
+    "notifications": {
+      "icon": "./assets/images/logo.jpg",
+      "color": "#ffffff"
+    },
+    "android": {
+      "usesCleartextTraffic": true,
+      "useNextNotificationsApi": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/logo.jpg",
+        "backgroundImage": "./assets/images/logo.jpg",
+        "monochromeImage": "./assets/images/logo.jpg"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.innocent1105.Payreece"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/logo.jpg"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/logo.jpg",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "react-native-maps"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "3fd37782-1a81-4e33-8e0e-732aa7c10b03"
+      }
+    },
+    "owner": "innocent1105"
+  }
+}
