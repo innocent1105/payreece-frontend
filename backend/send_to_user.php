@@ -3,6 +3,7 @@ require_once __DIR__ . '/cors.php';
 ipay_send_cors_headers();
 
 require_once __DIR__ . '/connection.php';
+require_once __DIR__ . '/mm_core.php';
 
 $input = ipay_json_input();
 ipay_require_post();
@@ -111,6 +112,22 @@ try {
     $stmt->execute([$transactionId]);
 
     $pdo->commit();
+
+    try {
+        mm_notify($pdo, (int)$sender['user_id'], 'money.sent', 'Money sent', 'You sent K' . number_format($amount, 2) . ' to ' . $receiver['fullname'] . '.', [
+            'screen' => 'transactions',
+            'reference' => $reference,
+            'transaction_id' => (int)$transactionId,
+            'direction' => 'sent',
+        ]);
+        mm_notify($pdo, (int)$receiver['user_id'], 'money.received', 'Money received', 'You received K' . number_format($amount, 2) . ' from ' . $sender['fullname'] . '.', [
+            'screen' => 'transactions',
+            'reference' => $reference,
+            'transaction_id' => (int)$transactionId,
+            'direction' => 'received',
+        ]);
+    } catch (Throwable $ignored) {
+    }
 
     ipay_json([
         'success' => true,

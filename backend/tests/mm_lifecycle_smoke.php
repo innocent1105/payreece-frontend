@@ -66,32 +66,28 @@ function mm_start_job(string $base, string $customerToken, string $agentToken, a
 $results['setup'] = $setupOk && $txOneId > 0;
 echo ($results['setup'] ? 'PASS' : 'FAIL') . ": setup accepted transaction" . PHP_EOL;
 
-foreach (['en_route' => 'agent_en_route', 'arrived' => 'arrived', 'processing' => 'processing'] as $action => $expected) {
+foreach (['en_route' => 'agent_en_route', 'arrived' => 'completed'] as $action => $expected) {
     [$status, $response] = mm_http($base . '/marketplace.php?action=transaction.transition', 'POST', $agentToken, ['transaction_id' => $txOneId, 'action' => $action]);
     $results['transition_' . $action] = $status === 200 && ($response['data']['state'] ?? '') === $expected;
     echo ($results['transition_' . $action] ? 'PASS' : 'FAIL') . ": transition $action HTTP $status" . PHP_EOL;
 }
 
-[$status, $response] = mm_http($base . '/marketplace.php?action=transaction.get&transaction_id=' . $txOneId, 'GET', $customerToken);
-$code = (string)($response['data']['handover_code'] ?? '');
-$results['code_visible'] = $status === 200 && strlen($code) === 6;
-echo ($results['code_visible'] ? 'PASS' : 'FAIL') . ": customer sees handover code HTTP $status" . PHP_EOL;
+foreach ([$customerToken => 'customer', $agentToken => 'agent'] as $token => $viewer) {
+    [$status, $response] = mm_http($base . '/marketplace.php?action=transaction.get&transaction_id=' . $txOneId, 'GET', $token);
+    $polyline = $response['data']['route']['polyline'] ?? [];
+    $results['route_' . $viewer] = $status === 200 && count($polyline) >= 2 && !empty($response['data']['location']);
+    echo ($results['route_' . $viewer] ? 'PASS' : 'FAIL') . ": $viewer sees live route HTTP $status" . PHP_EOL;
+}
 
-[$status, $response] = mm_http($base . '/marketplace.php?action=transaction.confirm', 'POST', $customerToken, ['transaction_id' => $txOneId, 'role' => 'customer']);
-$results['customer_confirm'] = $status === 200 && !empty($response['data']['customer_confirmed']);
-echo ($results['customer_confirm'] ? 'PASS' : 'FAIL') . ": customer confirm HTTP $status " . json_encode($response) . PHP_EOL;
-$stmt = $pdo->prepare('SELECT customer_confirmed_at, agent_confirmed_at FROM mm_transactions WHERE transaction_id = ?');
-$stmt->execute([$txOneId]);
-$stmt->fetch();
+[$status, $response] = mm_http($base . '/marketplace.php?action=notifications.list&limit=20', 'GET', $customerToken);
+$types = array_column($response['data']['notifications'] ?? [], 'type');
+$results['completion_notification'] = $status === 200 && in_array('transaction.completed', $types, true);
+echo ($results['completion_notification'] ? 'PASS' : 'FAIL') . ": customer sees completion notification HTTP $status" . PHP_EOL;
 
-$wrongCode = str_pad((string)(((int)$code + 1) % 1000000), 6, '0', STR_PAD_LEFT);
-[$status, $response] = mm_http($base . '/marketplace.php?action=transaction.confirm', 'POST', $agentToken, ['transaction_id' => $txOneId, 'role' => 'agent', 'handover_code' => $wrongCode]);
-$results['wrong_code'] = $status === 400 && ($response['code'] ?? '') === 'invalid_handover_code';
-echo ($results['wrong_code'] ? 'PASS' : 'FAIL') . ": wrong handover code HTTP $status " . json_encode($response) . PHP_EOL;
-
-[$status, $response] = mm_http($base . '/marketplace.php?action=transaction.confirm', 'POST', $agentToken, ['transaction_id' => $txOneId, 'role' => 'agent', 'handover_code' => $code]);
-$results['complete'] = $status === 200 && ($response['data']['state'] ?? '') === 'completed';
-echo ($results['complete'] ? 'PASS' : 'FAIL') . ": dual confirmation completes HTTP $status " . json_encode($response) . PHP_EOL;
+$stmt = $pdo->prepare('SELECT availability FROM agent_profiles WHERE agent_id = ? LIMIT 1');
+$stmt->execute([$agentId]);
+$results['agent_available_after_complete'] = (string)$stmt->fetchColumn() === 'available';
+echo ($results['agent_available_after_complete'] ? 'PASS' : 'FAIL') . ": agent available after complete" . PHP_EOL;
 
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM liquidity_reservations WHERE agent_id = ? AND state = 'settled'");
 $stmt->execute([$agentId]);

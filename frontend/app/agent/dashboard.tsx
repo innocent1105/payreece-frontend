@@ -1,12 +1,12 @@
-import BottomSheet from '@/components/marketplace/BottomSheet';
 import { ErrorText, InfoText, PrimaryButton, SectionCard } from '@/components/marketplace/ui';
 import { getForegroundLocation, sendAgentLocation, startForegroundLocationSharing } from '@/components/lib/agent-location';
-import { MarketplaceError, marketplace } from '@/components/lib/marketplace';
+import { MarketplaceError, marketplace, marketplaceActivity } from '@/components/lib/marketplace';
 import { BASE_URL } from '@/constants/api';
 import { useAppTheme } from '@/hooks/use-theme-color';
+import { formatDistanceToNow } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ export default function AgentDashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [earnings, setEarnings] = useState<any>(null);
   const [offers, setOffers] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [activeTxId, setActiveTxId] = useState<number | null>(null);
@@ -32,12 +33,30 @@ export default function AgentDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [agentProfile, agentEarnings] = await Promise.all([
+      const [agentProfile, agentEarnings, requestHistory] = await Promise.all([
         marketplace<any>('agent.profile'),
         marketplace<any>('agent.earnings'),
+        marketplace<any>('request.history'),
       ]);
       setProfile(agentProfile);
       setEarnings(agentEarnings);
+      setHistory(requestHistory?.history ?? []);
+      if (activeTxRef.current) {
+        try {
+          const details = await marketplace<any>('transaction.get', { params: { transaction_id: activeTxRef.current } });
+          if (['completed', 'cancelled', 'expired', 'disputed'].includes(String(details?.state ?? ''))) {
+            await SecureStore.deleteItemAsync(ACTIVE_AGENT_KEY);
+            activeTxRef.current = null;
+            setActiveTxId(null);
+          }
+        } catch (err) {
+          if (err instanceof MarketplaceError && (err.status === 404 || ['transaction_not_found', 'request_not_found'].includes(err.code))) {
+            await SecureStore.deleteItemAsync(ACTIVE_AGENT_KEY);
+            activeTxRef.current = null;
+            setActiveTxId(null);
+          }
+        }
+      }
       const liquidity = agentProfile?.liquidity?.[agentProfile?.networks?.[0]?.network] ?? null;
       if (liquidity) {
         setCash(String(Number(liquidity.cash_available ?? 0)));
@@ -60,20 +79,45 @@ export default function AgentDashboard() {
 
   useEffect(() => {
     const timer = setTimeout(() => { void load(); }, 0);
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
     (async () => {
       try {
         const stored = await SecureStore.getItemAsync(ACTIVE_AGENT_KEY);
-        if (stored) {
-          const id = Number(JSON.parse(stored).transactionId ?? 0);
-          if (id > 0) {
+        const id = Number(stored ? JSON.parse(stored).transactionId ?? 0 : 0);
+        if (id > 0) {
+          try {
+            const details = await marketplace<any>('transaction.get', { params: { transaction_id: id } });
+            if (['completed', 'cancelled', 'expired', 'disputed'].includes(String(details?.state ?? ''))) {
+              await SecureStore.deleteItemAsync(ACTIVE_AGENT_KEY);
+              if (active) {
+                setActiveTxId(null);
+                activeTxRef.current = null;
+                void load();
+              }
+              return;
+            }
+          } catch {}
+          if (active) {
             setActiveTxId(id);
             activeTxRef.current = id;
           }
+        } else if (active) {
+          setActiveTxId(null);
+          activeTxRef.current = null;
         }
-      } catch {}
+      } catch {
+        if (active) {
+          setActiveTxId(null);
+          activeTxRef.current = null;
+        }
+      }
     })();
-    return () => clearTimeout(timer);
-  }, [load]);
+    return () => { active = false; };
+  }, [load]));
 
   useEffect(() => {
     const poll = setInterval(() => { if (profile?.availability === 'available') void load(); }, 4000);
@@ -144,6 +188,7 @@ export default function AgentDashboard() {
       });
       setOffers((current) => current.filter((item) => item.offer_id !== offer.offer_id));
       if (decision === 'accept' && result.transaction_id) {
+        setProfile((current: any) => ({ ...current, availability: 'busy' }));
         setActiveTxId(Number(result.transaction_id));
         activeTxRef.current = Number(result.transaction_id);
         await SecureStore.setItemAsync(ACTIVE_AGENT_KEY, JSON.stringify({ transactionId: Number(result.transaction_id) }));
@@ -166,8 +211,8 @@ export default function AgentDashboard() {
 
   return (
     <View style={{ flex: 1, backgroundColor: t.background }}>
-      <ScreenHero title="Agent dashboard" subtitle={profile?.business_name || 'Your agent workspace'} onBack={() => router.back()} />
-      <ScrollView contentContainerStyle={{ padding: 20, marginTop: -24, paddingBottom: insets.bottom + 40 }}>
+      <ScreenHero compact title="Agent dashboard" subtitle={profile?.business_name || 'Your agent workspace'} onBack={() => router.back()} />
+      <ScrollView contentContainerStyle={{ padding: 20, marginTop: -16, paddingBottom: insets.bottom + 40 }}>
         <SectionCard title="Status">
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
@@ -192,24 +237,8 @@ export default function AgentDashboard() {
           <ErrorText message={error} />
         </SectionCard>
 
-        <SectionCard title="Liquidity">
-          <InfoText>Declare how much cash and float you can serve for {profile?.networks?.[0]?.network ?? 'your network'}.</InfoText>
-          <View style={styles.inputRow}>
-            <TextInputSmall label="Cash" value={cash} onChange={setCash} />
-            <TextInputSmall label="Float" value={floatBalance} onChange={setFloatBalance} />
-          </View>
-          <PrimaryButton label={busy ? 'Saving...' : 'Save liquidity'} onPress={() => void saveLiquidity()} disabled={!verified || busy} tone="secondary" />
-        </SectionCard>
-
-        <SectionCard title="Earnings">
-          <Text style={[styles.earnings, { color: t.text }]}>K{earnings?.total_earnings ?? '0.00'}</Text>
-          <InfoText>Completed jobs: {earnings?.completed_jobs ?? 0} · Acceptance: {profile?.acceptance_rate ?? 0}%</InfoText>
-        </SectionCard>
-      </ScrollView>
-
-      <BottomSheet visible={!!offer} onClose={() => setOffers([])} title="New request nearby">
         {offer ? (
-          <View>
+          <SectionCard title="Incoming request">
             <View style={styles.offerProfile}>
               <Image
                 source={{ uri: `${BASE_URL}/view_pp.php?file=${encodeURIComponent(offer.customer?.avatar || 'avatar1.jpg')}` }}
@@ -230,13 +259,58 @@ export default function AgentDashboard() {
             <InfoText>
               {offer.direction === 'withdrawal' ? 'Customer wants to withdraw cash.' : 'Customer wants to deposit money.'} Earning: K{offer.expected_earning}.
             </InfoText>
-            <PrimaryButton label={busy ? 'Working...' : 'Accept request'} onPress={() => void respond(offer, 'accept')} disabled={busy} />
-            <Pressable onPress={() => void respond(offer, 'reject')} disabled={busy} style={[styles.rejectButton, { borderColor: t.border }]}>
-              <Text style={{ color: t.textSecondary, fontWeight: '700' }}>Decline</Text>
-            </Pressable>
-          </View>
+            <View style={styles.offerActions}>
+              <View style={{ flex: 1 }}>
+                <PrimaryButton label={busy ? 'Accepting...' : 'Accept request'} onPress={() => void respond(offer, 'accept')} disabled={busy} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <PrimaryButton label={busy ? 'Working...' : 'Decline'} tone="danger" onPress={() => void respond(offer, 'reject')} disabled={busy} />
+              </View>
+            </View>
+          </SectionCard>
         ) : null}
-      </BottomSheet>
+
+        <SectionCard title="Liquidity">
+          <InfoText>Declare how much cash and float you can serve for {profile?.networks?.[0]?.network ?? 'your network'}.</InfoText>
+          <View style={styles.inputRow}>
+            <TextInputSmall label="Cash" value={cash} onChange={setCash} />
+            <TextInputSmall label="Float" value={floatBalance} onChange={setFloatBalance} />
+          </View>
+          <PrimaryButton label={busy ? 'Saving...' : 'Save liquidity'} onPress={() => void saveLiquidity()} disabled={!verified || busy} tone="secondary" />
+        </SectionCard>
+
+        <SectionCard title="Earnings">
+          <Text style={[styles.earnings, { color: t.text }]}>K{earnings?.total_earnings ?? '0.00'}</Text>
+          <InfoText>Completed jobs: {earnings?.completed_jobs ?? 0} · Acceptance: {profile?.acceptance_rate ?? 0}%</InfoText>
+        </SectionCard>
+
+        <SectionCard title="Recent activity">
+          {history.length === 0 ? (
+            <InfoText>Accepted and completed requests will appear here.</InfoText>
+          ) : history.map((item) => {
+            const activity = marketplaceActivity(item);
+            return (
+              <Pressable
+                key={activity.id}
+                onPress={() => router.push({ pathname: '/marketplace/map', params: { transaction_id: String(activity.transaction_id), role: 'agent' } })}
+                style={styles.historyRow}
+              >
+                <View style={[styles.historyIcon, { backgroundColor: t.accentSoftBg }]}>
+                  <Ionicons name="swap-horizontal-outline" size={16} color={t.tint} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.historyTitle, { color: t.text }]} numberOfLines={1}>{activity.title}</Text>
+                  <Text style={[styles.historyMeta, { color: t.textMuted }]}>
+                    {activity.date ? formatDistanceToNow(new Date(activity.date), { addSuffix: true }) : ''} · K{activity.amount}
+                  </Text>
+                </View>
+                <Text style={[styles.historyState, { color: activity.state === 'completed' ? t.success : t.tint }]}>{activity.status}</Text>
+              </Pressable>
+            );
+          })}
+        </SectionCard>
+      </ScrollView>
+
     </View>
   );
 }
@@ -288,8 +362,14 @@ const styles = StyleSheet.create({
   offerName: { fontSize: 17, fontWeight: '700' },
   offerMeta: { fontSize: 12, marginTop: 3 },
   offerStats: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  offerActions: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1, padding: 10, borderRadius: Radius.sm },
   statLabel: { fontSize: 11 },
   statValue: { fontSize: 14, fontWeight: '700', marginTop: 2 },
   rejectButton: { alignItems: 'center', paddingVertical: 13, borderRadius: Radius.md, borderWidth: 1, marginTop: 8 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  historyIcon: { width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  historyTitle: { fontSize: 14, fontWeight: '600' },
+  historyMeta: { fontSize: 11, marginTop: 2 },
+  historyState: { fontSize: 11, fontWeight: '700', textTransform: 'capitalize' },
 });

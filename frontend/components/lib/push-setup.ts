@@ -8,7 +8,6 @@ import * as SecureStore from 'expo-secure-store';
 export async function setupMarketplacePush(): Promise<() => void> {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false,
       shouldShowBanner: true,
@@ -18,6 +17,10 @@ export async function setupMarketplacePush(): Promise<() => void> {
 
   const responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data ?? {};
+    if (data.screen === 'agent.request' || data.offer_id) {
+      router.push('/agent/dashboard');
+      return;
+    }
     if (data.transaction_id) {
       router.push({
         pathname: '/marketplace/transaction',

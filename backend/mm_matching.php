@@ -158,7 +158,13 @@ function mm_create_request(PDO $pdo, array $user, array $input, string $idempote
         $request = $stmt->fetch();
 
         mm_audit($pdo, 'mm_request', $requestId, null, 'create', null, 'searching', 'customer', (int)$user['user_id'], [], $keyPayload);
-        mm_notify($pdo, (int)$user['user_id'], 'request.searching', 'Searching for an agent', 'We are looking for a nearby verified agent.', ['request_id' => $requestId]);
+        mm_notify($pdo, (int)$user['user_id'], 'request.searching', ucfirst($direction) . ' request sent', 'We are looking for a nearby verified ' . $network . ' agent for K' . mm_ngwee_to_decimal($amount) . '.', [
+            'request_id' => $requestId,
+            'screen' => 'marketplace',
+            'direction' => $direction,
+            'network' => $network,
+            'amount' => mm_ngwee_to_decimal($amount),
+        ]);
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {
@@ -324,7 +330,14 @@ function mm_dispatch_next_offer(PDO $pdo, int $requestId, bool $alreadyInTransac
             'distance_m' => number_format($scored[0]['distance'], 2, '.', ''),
             'radius_m' => $radiusM,
         ]);
-        mm_notify($pdo, (int)$chosen['user_id'], 'offer.new', 'New request nearby', 'A customer near you needs an agent.', ['offer_id' => $offerId, 'request_id' => $requestId]);
+        mm_notify($pdo, (int)$chosen['user_id'], 'offer.new', 'New ' . $request['network'] . ' request', 'K' . number_format((float)$request['amount'], 2) . ' ' . ucfirst($request['direction']) . ' · ' . (int)round($scored[0]['distance']) . 'm away. Accept or decline now.', [
+            'offer_id' => $offerId,
+            'request_id' => $requestId,
+            'screen' => 'agent.request',
+            'network' => $request['network'],
+            'direction' => $request['direction'],
+            'amount' => (string)$request['amount'],
+        ]);
         if (!$alreadyInTransaction) {
             $pdo->commit();
         }
@@ -335,6 +348,41 @@ function mm_dispatch_next_offer(PDO $pdo, int $requestId, bool $alreadyInTransac
         }
         throw $e;
     }
+}
+
+function mm_dispatch_pending_requests(PDO $pdo, int $limit = 10): int
+{
+    $limit = max(1, min(50, $limit));
+    $stmt = $pdo->prepare('
+        SELECT t.request_id
+        FROM mm_transactions t
+        JOIN mm_requests r ON r.request_id = t.request_id
+        WHERE t.state = \'searching\'
+          AND r.state = \'searching\'
+          AND r.search_deadline > NOW()
+          AND NOT EXISTS (
+              SELECT 1 FROM mm_offers o
+              WHERE o.request_id = t.request_id AND o.state = \'offered\' AND o.expires_at > NOW()
+          )
+        ORDER BY t.created_at ASC
+        LIMIT ' . $limit
+    );
+    $stmt->execute();
+    $requestIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+
+    $dispatched = 0;
+    foreach ($requestIds as $requestId) {
+        $stmt = $pdo->prepare("UPDATE mm_offers SET state = 'expired', responded_at = COALESCE(responded_at, NOW()) WHERE request_id = ? AND state = 'offered' AND expires_at <= NOW()");
+        $stmt->execute([$requestId]);
+        try {
+            if (mm_dispatch_next_offer($pdo, $requestId)) {
+                ++$dispatched;
+            }
+        } catch (Throwable $ignored) {
+        }
+    }
+
+    return $dispatched;
 }
 
 function mm_agent_offers(PDO $pdo, array $agent): array
@@ -473,4 +521,57 @@ function mm_cancel_request(PDO $pdo, array $user, array $input, string $idempote
     }
 
     mm_idempotency_respond($pdo, $idempotencyId, ['success' => true, 'message' => 'Request cancelled.', 'data' => ['transaction_id' => (int)$updated['transaction_id'], 'state' => $updated['state']]]);
+}
+
+function mm_request_history(PDO $pdo, array $user, int $limit = 50): array
+{
+    $limit = max(1, min(100, $limit));
+    $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
+    $agentId = (int)($agent['agent_id'] ?? 0);
+
+    $stmt = $pdo->prepare('
+        SELECT t.transaction_id, t.request_id, r.public_id, t.state, t.direction, t.network, t.amount, t.created_at,
+               t.customer_id, t.agent_id, t.platform_fee, t.agent_earning, t.cancel_reason,
+               cu.fullname AS customer_name, cu.phone_number AS customer_phone, cu.avatar AS customer_avatar,
+               ap.business_name AS agent_name, au.phone_number AS agent_phone, au.avatar AS agent_avatar,
+               CASE WHEN t.customer_id = :viewer_id THEN "customer" ELSE "agent" END AS viewer_role
+        FROM mm_transactions t
+        INNER JOIN mm_requests r ON r.request_id = t.request_id
+        LEFT JOIN users cu ON cu.user_id = t.customer_id
+        LEFT JOIN agent_profiles ap ON ap.agent_id = t.agent_id
+        LEFT JOIN users au ON au.user_id = ap.user_id
+        WHERE (t.customer_id = :viewer_id_2 OR t.agent_id = :agent_id)
+          AND t.deleted_at IS NULL
+          AND r.deleted_at IS NULL
+        ORDER BY t.created_at DESC, t.transaction_id DESC
+        LIMIT ' . $limit
+    );
+    $stmt->execute(['viewer_id' => (int)$user['user_id'], 'viewer_id_2' => (int)$user['user_id'], 'agent_id' => $agentId]);
+    $rows = $stmt->fetchAll();
+
+    $history = [];
+    foreach ($rows as $row) {
+        $isCustomer = $row['viewer_role'] === 'customer';
+        $history[] = [
+            'transaction_id' => (int)$row['transaction_id'],
+            'request_id' => (int)$row['request_id'],
+            'public_id' => $row['public_id'],
+            'state' => $row['state'],
+            'direction' => $row['direction'],
+            'network' => $row['network'],
+            'amount' => $row['amount'],
+            'date' => $row['created_at'],
+            'role' => $row['viewer_role'],
+            'platform_fee' => $row['platform_fee'],
+            'earning' => $row['agent_earning'],
+            'cancel_reason' => $row['cancel_reason'],
+            'counterparty' => $isCustomer
+                ? ($row['agent_name'] ?: 'Agent')
+                : ($row['customer_name'] ?: 'Customer'),
+            'counterparty_phone' => $isCustomer ? ($row['agent_phone'] ?? '') : ($row['customer_phone'] ?? ''),
+            'counterparty_avatar' => $isCustomer ? ($row['agent_avatar'] ?? '') : ($row['customer_avatar'] ?? ''),
+        ];
+    }
+
+    return ['history' => $history];
 }

@@ -63,6 +63,7 @@ export default function MarketplaceMapScreen() {
   const lastMetRef = useRef(false);
   const meetingPollRef = useRef(false);
   const initRef = useRef(false);
+  const ratingPromptedRef = useRef<number | null>(null);
 
   const direction = String(params.direction ?? 'withdrawal');
   const network = String(params.network ?? 'MTN');
@@ -93,7 +94,23 @@ export default function MarketplaceMapScreen() {
 
   const clearActive = useCallback(async () => {
     try { await SecureStore.deleteItemAsync(ACTIVE_KEY); } catch {}
+    try { await SecureStore.deleteItemAsync('marketplace_active_agent'); } catch {}
   }, []);
+
+  const resetToIdle = useCallback(async () => {
+    await clearActive();
+    requestIdRef.current = '';
+    txIdRef.current = null;
+    lastStateRef.current = '';
+    lastMetRef.current = false;
+    setRequest(null);
+    applyTx(null);
+    setAgents([]);
+    setMetRecorded(false);
+    setHandoverCode('');
+    setRatingVisible(false);
+    setError('');
+  }, [clearActive, applyTx]);
 
   const loadNearby = useCallback(async (point: Point) => {
     try {
@@ -107,6 +124,29 @@ export default function MarketplaceMapScreen() {
     }
   }, [network, direction, amount]);
 
+  const createRequest = useCallback(async (point: Point) => {
+    await loadNearby(point);
+    idempotencyRef.current = newIdempotencyKey('request');
+    const created = await marketplace<any>('customer.request.create', {
+      method: 'POST',
+      body: {
+        direction,
+        network,
+        amount,
+        pickup_address: address,
+        pickup_lat: point.lat,
+        pickup_lng: point.lng,
+      },
+      idempotencyKey: idempotencyRef.current,
+    });
+    setRequest(created);
+    const createdTxId = Number(created?.transaction?.transaction_id ?? 0);
+    if (createdTxId > 0) {
+      await saveActive(String(created.public_id ?? ''), createdTxId);
+      showBanner('Request sent', 'Searching for the closest available agent.');
+    }
+  }, [loadNearby, direction, network, amount, address, saveActive, showBanner]);
+
   const initialize = useCallback(async () => {
     if (initRef.current) return;
     initRef.current = true;
@@ -118,14 +158,31 @@ export default function MarketplaceMapScreen() {
       locationRef.current = point;
       setLocation(point);
 
+      let resumedStatus: any = null;
       if (role === 'customer' && !txIdRef.current) {
         const stored = await SecureStore.getItemAsync(ACTIVE_KEY);
-        if (stored) {
-          const active = JSON.parse(stored);
-          if (active?.publicId && active?.transactionId) {
-            requestIdRef.current = String(active.publicId);
-            txIdRef.current = Number(active.transactionId);
+        let active: any = null;
+        try { active = stored ? JSON.parse(stored) : null; } catch { active = null; }
+        if (active?.publicId && active?.transactionId) {
+          const publicId = String(active.publicId);
+          try {
+            resumedStatus = await marketplace<any>('customer.request.status', { params: { public_id: publicId } });
+            const state = String(resumedStatus?.state ?? '');
+            if (['completed', 'cancelled', 'expired', 'rejected', 'disputed'].includes(state)) {
+              await resetToIdle();
+            } else {
+              requestIdRef.current = publicId;
+              txIdRef.current = Number(active.transactionId);
+            }
+          } catch (err) {
+            if (err instanceof MarketplaceError && (err.status === 404 || ['request_not_found', 'transaction_not_found'].includes(err.code))) {
+              await resetToIdle();
+            } else {
+              throw err;
+            }
           }
+        } else {
+          await resetToIdle();
         }
       }
 
@@ -136,25 +193,10 @@ export default function MarketplaceMapScreen() {
       }
 
       if (role === 'customer' && !txIdRef.current) {
-        await loadNearby(point);
-        const created = await marketplace<any>('customer.request.create', {
-          method: 'POST',
-          body: {
-            direction,
-            network,
-            amount,
-            pickup_address: address,
-            pickup_lat: point.lat,
-            pickup_lng: point.lng,
-          },
-          idempotencyKey: idempotencyRef.current,
-        });
-        setRequest(created);
-        const createdTxId = Number(created?.transaction?.transaction_id ?? 0);
-        if (createdTxId > 0) {
-          await saveActive(String(created.public_id ?? ''), createdTxId);
-          showBanner('Request sent', 'Searching for the closest available agent.');
-        }
+        await createRequest(point);
+      } else if (role === 'customer' && resumedStatus) {
+        setRequest(resumedStatus);
+        if (resumedStatus?.transaction?.transaction_id) txIdRef.current = Number(resumedStatus.transaction.transaction_id);
       } else if (role === 'customer' && requestIdRef.current) {
         const status = await marketplace<any>('customer.request.status', { params: { public_id: requestIdRef.current } });
         setRequest(status);
@@ -163,27 +205,65 @@ export default function MarketplaceMapScreen() {
 
       if (txIdRef.current) {
         const details = await marketplace<any>('transaction.get', { params: { transaction_id: txIdRef.current } });
+        if (['cancelled', 'expired', 'rejected', 'disputed'].includes(String(details?.state ?? ''))) {
+          await resetToIdle();
+          if (role === 'customer') await createRequest(point);
+          return;
+        }
         applyTx(details);
         lastStateRef.current = details.state ?? '';
       }
     } catch (err) {
-      const message = err instanceof MarketplaceError ? err.message : 'Could not start the marketplace flow.';
-      setError(message);
+      if (role === 'customer' && err instanceof MarketplaceError && (err.status === 404 || ['request_not_found', 'transaction_not_found'].includes(err.code))) {
+        await resetToIdle();
+        if (locationRef.current) {
+          try { await createRequest(locationRef.current); } catch { setError(''); }
+        }
+      } else {
+        const message = err instanceof MarketplaceError ? err.message : 'Could not start the marketplace flow.';
+        setError(message);
+      }
     } finally {
       setBusy(false);
     }
-  }, [role, address, direction, network, amount, loadNearby, saveActive, showBanner, applyTx]);
+  }, [role, createRequest, resetToIdle, applyTx]);
 
   const refresh = useCallback(async () => {
     try {
-      if (role === 'customer' && requestIdRef.current && !request?.state?.includes('complet') && request?.state !== 'cancelled' && request?.state !== 'expired') {
-        const status = await marketplace<any>('customer.request.status', { params: { public_id: requestIdRef.current } });
+      if (role === 'customer' && requestIdRef.current) {
+        let status: any;
+        try {
+          status = await marketplace<any>('customer.request.status', { params: { public_id: requestIdRef.current } });
+        } catch (err) {
+          if (err instanceof MarketplaceError && (err.status === 404 || ['request_not_found', 'transaction_not_found'].includes(err.code))) {
+            await resetToIdle();
+            if (locationRef.current) await loadNearby(locationRef.current);
+            return;
+          }
+          throw err;
+        }
+        const state = String(status?.state ?? '');
+        if (['completed', 'cancelled', 'expired', 'rejected', 'disputed'].includes(state)) {
+          await resetToIdle();
+          if (locationRef.current) await loadNearby(locationRef.current);
+          return;
+        }
         setRequest(status);
         if (status?.transaction?.transaction_id) txIdRef.current = Number(status.transaction.transaction_id);
       }
 
       if (txIdRef.current) {
-        const details = await marketplace<any>('transaction.get', { params: { transaction_id: txIdRef.current } });
+        let details: any;
+        try {
+          details = await marketplace<any>('transaction.get', { params: { transaction_id: txIdRef.current } });
+        } catch (err) {
+          if (err instanceof MarketplaceError && (err.status === 404 || ['transaction_not_found', 'request_not_found'].includes(err.code))) {
+            await resetToIdle();
+            if (locationRef.current) await loadNearby(locationRef.current);
+            return;
+          }
+          throw err;
+        }
         applyTx(details);
         if (details.state !== lastStateRef.current) {
           lastStateRef.current = details.state ?? '';
@@ -192,8 +272,13 @@ export default function MarketplaceMapScreen() {
             showBanner(title, 'Open the sheet to see the latest update.');
           }
         }
-        if (['completed', 'cancelled', 'expired'].includes(details.state)) {
+        if (['completed', 'cancelled', 'expired', 'rejected', 'disputed'].includes(details.state)) {
           await clearActive();
+          if (['cancelled', 'expired', 'rejected', 'disputed'].includes(details.state)) {
+            await resetToIdle();
+            if (locationRef.current) await loadNearby(locationRef.current);
+            return;
+          }
         }
       } else if (role === 'customer' && locationRef.current) {
         await loadNearby(locationRef.current);
@@ -201,7 +286,7 @@ export default function MarketplaceMapScreen() {
     } catch (err) {
       if (err instanceof MarketplaceError && err.status !== 401) setError(err.message);
     }
-  }, [role, request, loadNearby, clearActive, showBanner, applyTx]);
+  }, [role, loadNearby, resetToIdle, clearActive, showBanner, applyTx]);
 
   const checkMeeting = useCallback(async () => {
     if (!txIdRef.current || meetingPollRef.current || !locationRef.current) return;
@@ -296,8 +381,21 @@ export default function MarketplaceMapScreen() {
   };
 
   const cancel = async () => {
+    if (role === 'customer' && requestIdRef.current) {
+      const result = await runAction(() => marketplace('customer.request.cancel', {
+        method: 'POST',
+        body: { public_id: requestIdRef.current, reason: 'Cancelled by customer' },
+        idempotencyKey: newIdempotencyKey('cancel'),
+      }), 'Request cancelled');
+      if (result) {
+        await resetToIdle();
+        setTimeout(() => router.back(), 300);
+        return;
+      }
+      return;
+    }
     if (!txIdRef.current) {
-      router.back();
+      setError('Request is still loading. Try again in a moment.');
       return;
     }
     const result = await runAction(() => marketplace('transaction.cancel', {
@@ -305,8 +403,8 @@ export default function MarketplaceMapScreen() {
       body: { transaction_id: txIdRef.current, reason: `Cancelled by ${role}` },
     }), 'Request cancelled');
     if (result) {
-      await clearActive();
-      setTimeout(() => router.back(), 500);
+      await resetToIdle();
+      setTimeout(() => router.back(), 300);
     }
   };
 
@@ -351,6 +449,14 @@ export default function MarketplaceMapScreen() {
   };
 
   const state = tx?.state ?? request?.state ?? 'searching';
+
+  useEffect(() => {
+    if (role !== 'customer' || state !== 'completed' || !txIdRef.current || tx?.my_rating) return;
+    if (ratingPromptedRef.current === txIdRef.current) return;
+    ratingPromptedRef.current = txIdRef.current;
+    setRatingVisible(true);
+  }, [role, state, tx?.my_rating]);
+
   const counterpart = role === 'customer'
     ? (tx?.location && tx?.state !== 'searching' ? tx.location : null)
     : (tx?.location ?? null);
@@ -423,7 +529,7 @@ export default function MarketplaceMapScreen() {
 
       {error ? <Text style={[styles.errorToast, { color: t.danger }]}>{error}</Text> : null}
 
-      <BottomSheet visible onClose={() => router.back()} dismissible={false}>
+      <BottomSheet visible onClose={() => router.back()} dismissible={false} mapOverlay>
         <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={[styles.sheetState, { borderColor: t.border }]}>
             <View style={[styles.sheetStateIcon, { backgroundColor: isActive ? t.successSoft : t.accentSoftBg }]}>
@@ -459,9 +565,11 @@ export default function MarketplaceMapScreen() {
                   <Text style={[styles.sheetText, { color: t.textSecondary }]}>Waiting for an agent to accept.</Text>
                 </View>
               ) : null}
-              <Pressable onPress={cancel} style={[styles.secondaryButton, { borderColor: t.border }]}>
-                <Text style={{ color: t.text, fontWeight: '700' }}>Cancel request</Text>
-              </Pressable>
+              {showCancel ? (
+                <Pressable disabled={actionBusy} onPress={() => void cancel()} style={[styles.secondaryButton, { borderColor: t.border }]}>
+                  <Text style={{ color: t.danger, fontWeight: '700' }}>{actionBusy ? 'Cancelling...' : 'Cancel request'}</Text>
+                </Pressable>
+              ) : null}
             </>
           ) : null}
 
@@ -519,12 +627,12 @@ export default function MarketplaceMapScreen() {
               ) : null}
               {role === 'agent' && state === 'agent_en_route' ? (
                 <Pressable disabled={actionBusy} onPress={() => void transition('arrived')} style={[styles.primaryButton, { backgroundColor: t.tint }]}>
-                  <Text style={styles.primaryText}>I have arrived</Text>
+                  <Text style={styles.primaryText}>Arrived · complete request</Text>
                 </Pressable>
               ) : null}
-              {role === 'agent' && met && state === 'arrived' ? (
-                <Pressable disabled={actionBusy} onPress={() => void transition('processing')} style={[styles.primaryButton, { backgroundColor: t.tint }]}>
-                  <Text style={styles.primaryText}>Complete task</Text>
+              {role === 'agent' && state === 'arrived' ? (
+                <Pressable disabled={actionBusy} onPress={() => void transition('arrived')} style={[styles.primaryButton, { backgroundColor: t.tint }]}>
+                  <Text style={styles.primaryText}>Complete request</Text>
                 </Pressable>
               ) : null}
 
@@ -585,7 +693,7 @@ export default function MarketplaceMapScreen() {
 
               {showCancel ? (
                 <Pressable disabled={actionBusy} onPress={() => void cancel()} style={[styles.secondaryButton, { borderColor: t.border }]}>
-                  <Text style={{ color: t.danger, fontWeight: '700' }}>Cancel request</Text>
+                  <Text style={{ color: t.danger, fontWeight: '700' }}>{actionBusy ? 'Cancelling...' : 'Cancel request'}</Text>
                 </Pressable>
               ) : null}
             </>

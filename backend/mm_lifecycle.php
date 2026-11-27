@@ -40,17 +40,30 @@ function mm_transaction_details(PDO $pdo, array $tx, array $user, ?array $agent)
             $stmt->execute([$tx['agent_id']]);
             $agentLive = $stmt->fetch();
         }
-        $stmt = $pdo->prepare('SELECT pickup_lat, pickup_lng FROM mm_requests WHERE request_id = ? LIMIT 1');
-        $stmt->execute([$tx['request_id']]);
-        $pickup = $stmt->fetch();
-        if ($agentLive && $pickup) {
-            $agentPoint = [(float)$agentLive['lat'], (float)$agentLive['lng']];
-            $pickupPoint = [(float)$pickup['pickup_lat'], (float)$pickup['pickup_lng']];
-            if ($viewerRole === 'agent') {
-                $payload['route'] = mm_route($pdo, $pickupPoint[0], $pickupPoint[1], $agentPoint[0], $agentPoint[1]);
+        $destination = $payload['location'];
+        if ($viewerRole === 'customer') {
+            $stmt = $pdo->prepare('SELECT lat, lng FROM user_locations WHERE user_id = ? LIMIT 1');
+            $stmt->execute([(int)$tx['customer_id']]);
+            $customerLive = $stmt->fetch();
+            if ($customerLive) {
+                $destination = $customerLive;
             } else {
-                $payload['route'] = mm_route($pdo, $agentPoint[0], $agentPoint[1], $pickupPoint[0], $pickupPoint[1]);
+                $stmt = $pdo->prepare('SELECT pickup_lat AS lat, pickup_lng AS lng FROM mm_requests WHERE request_id = ? LIMIT 1');
+                $stmt->execute([$tx['request_id']]);
+                $pickup = $stmt->fetch();
+                if ($pickup) {
+                    $destination = $pickup;
+                }
             }
+        }
+        if ($agentLive && $destination) {
+            $payload['route'] = mm_route(
+                $pdo,
+                (float)$agentLive['lat'],
+                (float)$agentLive['lng'],
+                (float)$destination['lat'],
+                (float)$destination['lng'],
+            );
         }
     }
     $stmt = $pdo->prepare('SELECT meeting_id, distance_m, met_at FROM mm_meetings WHERE transaction_id = ? LIMIT 1');
@@ -90,6 +103,10 @@ function mm_agent_transition(PDO $pdo, array $user, array $agent, array $input):
             mm_fail('This is not your assigned job.', 403, 'forbidden');
         }
         $updated = mm_transition($pdo, (int)$tx['transaction_id'], $target, 'agent', (int)$user['user_id']);
+        if ($target === 'arrived') {
+            $updated = mm_transition($pdo, (int)$tx['transaction_id'], 'processing', 'agent', (int)$user['user_id']);
+            $updated = mm_transition($pdo, (int)$tx['transaction_id'], 'completed', 'system', null, ['reason' => 'arrived_completed']);
+        }
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) {

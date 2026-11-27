@@ -47,7 +47,7 @@ export default function PaySheet({ visible, onClose }: { visible: boolean; onClo
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Pay with an agent">
+    <BottomSheet visible={visible} onClose={onClose} title="Request an agent">
       <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={[styles.segment, { backgroundColor: t.inputBg }]}>
           {([

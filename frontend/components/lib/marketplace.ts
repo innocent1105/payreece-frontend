@@ -59,6 +59,62 @@ export async function marketplace<T = any>(
   return parseResponse<T>(response);
 }
 
+export async function marketplaceHistory(limit = 50): Promise<any[]> {
+  const data = await marketplace<any>('request.history', { params: { limit } });
+  return data?.history ?? [];
+}
+
+export async function listNudges(limit = 30): Promise<{ notifications: any[]; unread_count: number }> {
+  const data = await marketplace<any>('notifications.list', { params: { limit } });
+  return { notifications: data?.notifications ?? [], unread_count: Number(data?.unread_count ?? 0) };
+}
+
+export async function markNudgesRead(ids?: number[]): Promise<void> {
+  await marketplace('notifications.mark_read', {
+    method: 'POST',
+    body: ids?.length ? { ids } : {},
+  });
+}
+
+export function marketplaceActivity(item: any) {
+  const state = String(item?.state ?? 'searching').toLowerCase();
+  const role = item?.role === 'agent' ? 'agent' : 'customer';
+  const direction = item?.direction === 'deposit' ? 'Deposit' : 'Withdrawal';
+  const counterparty = item?.counterparty || (role === 'agent' ? 'Customer' : 'Agent');
+
+  const titles: Record<string, string> = {
+    searching: `${direction} request searching`,
+    matched: `${direction} request matched`,
+    accepted: `${direction} accepted · ${counterparty}`,
+    agent_en_route: `${direction} · agent on the way`,
+    arrived: `${direction} · agent arrived`,
+    processing: `${direction} · exchange in progress`,
+    completed: `${direction} completed · ${counterparty}`,
+    cancelled: `${direction} cancelled`,
+    expired: `${direction} expired`,
+    rejected: `${direction} rejected`,
+    disputed: `${direction} disputed`,
+  };
+
+  return {
+    id: `mm-${item?.transaction_id ?? item?.public_id}`,
+    type: 'marketplace',
+    transaction_id: item?.transaction_id,
+    public_id: item?.public_id,
+    role,
+    state,
+    direction: item?.direction,
+    network: item?.network,
+    counterparty,
+    counterparty_avatar: item?.counterparty_avatar,
+    from_me: role === 'customer',
+    amount: item?.amount,
+    date: item?.date,
+    title: titles[state] ?? `${direction} request`,
+    status: state.replace(/_/g, ' '),
+  };
+}
+
 export async function marketplaceUpload<T = any>(
   action: string,
   body: FormData,

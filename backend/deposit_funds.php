@@ -4,6 +4,7 @@ ipay_send_cors_headers();
 
 require_once __DIR__ . '/connection.php';
 require_once __DIR__ . '/lib_lenco.php';
+require_once __DIR__ . '/mm_core.php';
 
 $input = ipay_json_input();
 ipay_require_post();
@@ -63,6 +64,15 @@ try {
         VALUES (?, ?, 'deposit', ?, ?, 'pending', ?)
     ");
     $stmt->execute([$user['user_id'], $walletId, $user['user_id'], $amount, $reference]);
+
+    try {
+        mm_notify($pdo, (int)$user['user_id'], 'deposit.requested', 'Deposit initiated', 'A deposit of K' . number_format($amount, 2) . ' is waiting for your payment.', [
+            'screen' => 'transactions',
+            'reference' => $reference,
+            'direction' => 'deposit',
+        ]);
+    } catch (Throwable $ignored) {
+    }
 
     if (!empty($user['expo_push_token'])) {
         $payload = [

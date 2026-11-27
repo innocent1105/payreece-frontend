@@ -2,10 +2,10 @@ import { BASE_URL } from '@/constants/api';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -60,14 +60,16 @@ export default function AccountScreen() {
   const [profile, setProfile] = useState<any>(null);
   const role = profile?.marketplace_role ?? profile?.role ?? 'user';
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
+    let active = true;
     (async () => {
       try {
         const stored = await SecureStore.getItemAsync('dashboard_data');
-        if (stored) setProfile(JSON.parse(stored)?.data ?? null);
+        if (stored && active) setProfile(JSON.parse(stored)?.data ?? null);
       } catch {}
     })();
-  }, []);
+    return () => { active = false; };
+  }, []));
 
   const themeLabel = preference === 'system' ? 'System' : preference === 'dark' ? 'Dark' : 'Light';
 

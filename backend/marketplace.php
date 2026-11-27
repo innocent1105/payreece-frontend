@@ -66,6 +66,23 @@ try {
             ]);
             break;
 
+        case 'request.history':
+            mm_require_method('GET');
+            mm_ok(mm_request_history($pdo, $user, (int)($_GET['limit'] ?? $input['limit'] ?? 50)));
+            break;
+
+        case 'notifications.list':
+            mm_require_method('GET');
+            mm_ok(mm_notification_list($pdo, (int)$user['user_id'], (int)($_GET['limit'] ?? $input['limit'] ?? 30)));
+            break;
+
+        case 'notifications.mark_read':
+            if (!in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST', 'PUT'], true)) {
+                mm_require_method('POST');
+            }
+            mm_ok(mm_notification_mark_read($pdo, (int)$user['user_id'], $input), 'Notifications marked as read.');
+            break;
+
         case 'customer.location':
             if (!in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST', 'PUT'], true)) {
                 mm_require_method('POST');
@@ -114,7 +131,11 @@ try {
         case 'agent.availability':
             mm_require_method('PUT');
             $agent = mm_require_agent($pdo, $user);
-            mm_ok(mm_set_availability($pdo, $user, $agent, (string)($input['availability'] ?? '')));
+            $result = mm_set_availability($pdo, $user, $agent, (string)($input['availability'] ?? ''));
+            if (($result['availability'] ?? '') === 'available') {
+                mm_dispatch_pending_requests($pdo, 10);
+            }
+            mm_ok($result);
             break;
 
         case 'agent.location':
@@ -122,7 +143,9 @@ try {
                 mm_require_method('POST');
             }
             $agent = mm_require_agent($pdo, $user);
-            mm_ok(mm_update_location($pdo, $user, $agent, $input));
+            $result = mm_update_location($pdo, $user, $agent, $input);
+            mm_dispatch_pending_requests($pdo, 10);
+            mm_ok($result);
             break;
 
         case 'agent.earnings':
@@ -180,6 +203,9 @@ try {
             if (!$allowed) {
                 mm_fail('You cannot view this request.', 403, 'forbidden');
             }
+            if (($request['state'] ?? '') === 'searching') {
+                mm_dispatch_pending_requests($pdo, 10);
+            }
             mm_ok(mm_request_payload($pdo, $request, $user));
             break;
 
@@ -191,6 +217,7 @@ try {
         case 'agent.offers':
             mm_require_method('GET');
             $agent = mm_require_agent($pdo, $user);
+            mm_dispatch_pending_requests($pdo, 10);
             mm_ok(['offers' => mm_agent_offers($pdo, $agent)]);
             break;
 
@@ -207,13 +234,18 @@ try {
             if ($secret === '' || !hash_equals($secret, $provided)) {
                 mm_fail('Cron secret is invalid.', 403, 'forbidden');
             }
-            mm_ok(['processed' => mm_process_expirations($pdo)]);
+            $processed = mm_process_expirations($pdo);
+            mm_dispatch_pending_requests($pdo, 25);
+            mm_ok(['processed' => $processed]);
             break;
 
         case 'transaction.get':
             mm_require_method('GET');
             $agent = mm_agent_for_user($pdo, (int)$user['user_id']);
             $tx = mm_require_transaction_access($pdo, (int)($_GET['transaction_id'] ?? $input['transaction_id'] ?? 0), $user, $agent);
+            if (($tx['state'] ?? '') === 'searching') {
+                mm_dispatch_pending_requests($pdo, 10);
+            }
             mm_ok(mm_transaction_details($pdo, $tx, $user, $agent));
             break;
 

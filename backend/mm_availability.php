@@ -155,18 +155,28 @@ function mm_update_location(PDO $pdo, array $user, array $agent, array $input): 
 
 function mm_location_for_transaction(PDO $pdo, array $tx, string $viewerRole): ?array
 {
-    if (!in_array($tx['state'], ['accepted', 'agent_en_route', 'arrived', 'processing'], true)) {
+    if (!in_array($tx['state'], ['accepted', 'agent_en_route', 'arrived', 'processing', 'completed'], true)) {
         return null;
     }
 
     if ($viewerRole === 'agent') {
-        $stmt = $pdo->prepare('SELECT pickup_lat AS lat, pickup_lng AS lng, created_at AS updated_at FROM mm_requests WHERE request_id = ? LIMIT 1');
-        $stmt->execute([$tx['request_id']]);
+        $stmt = $pdo->prepare('SELECT lat, lng, updated_at FROM user_locations WHERE user_id = ? LIMIT 1');
+        $stmt->execute([(int)$tx['customer_id']]);
         $row = $stmt->fetch();
+        if (!$row) {
+            $stmt = $pdo->prepare('SELECT pickup_lat AS lat, pickup_lng AS lng, created_at AS updated_at FROM mm_requests WHERE request_id = ? LIMIT 1');
+            $stmt->execute([$tx['request_id']]);
+            $row = $stmt->fetch();
+        }
     } elseif ($viewerRole === 'customer' && !empty($tx['agent_id'])) {
         $stmt = $pdo->prepare('SELECT lat, lng, accuracy, heading, updated_at FROM agent_locations WHERE agent_id = ? LIMIT 1');
         $stmt->execute([$tx['agent_id']]);
         $row = $stmt->fetch();
+        if (!$row) {
+            $stmt = $pdo->prepare('SELECT lat, lng, NULL AS accuracy, NULL AS heading, NULL AS updated_at FROM agent_profiles WHERE agent_id = ? LIMIT 1');
+            $stmt->execute([$tx['agent_id']]);
+            $row = $stmt->fetch();
+        }
     } else {
         return null;
     }

@@ -347,6 +347,15 @@ function mm_push_send(PDO $pdo, int $userId, string $title, string $body, array 
     $stmt = $pdo->prepare('SELECT expo_token FROM user_push_tokens WHERE user_id = ? AND active = 1');
     $stmt->execute([$userId]);
     $tokens = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    $stmt = $pdo->prepare('SELECT expo_push_token FROM users WHERE user_id = ? AND expo_push_token IS NOT NULL AND expo_push_token <> "" LIMIT 1');
+    $stmt->execute([$userId]);
+    $legacyToken = (string)$stmt->fetchColumn();
+    if ($legacyToken !== '') {
+        $tokens[] = $legacyToken;
+    }
+    $tokens = array_values(array_unique(array_filter($tokens)));
+
     if (!$tokens) {
         return;
     }
@@ -392,6 +401,65 @@ function mm_notify(PDO $pdo, int $userId, string $type, string $title, string $b
     $update = $pdo->prepare('UPDATE user_notifications SET push_sent = 1 WHERE notification_id = ?');
     $update->execute([$notificationId]);
     return $notificationId;
+}
+
+function mm_notification_list(PDO $pdo, int $userId, int $limit = 30): array
+{
+    $limit = max(1, min(100, $limit));
+    $stmt = $pdo->prepare('
+        SELECT notification_id, type, title, body, payload_json, read_at, created_at
+        FROM user_notifications
+        WHERE user_id = ? AND deleted_at IS NULL
+        ORDER BY created_at DESC, notification_id DESC
+        LIMIT ' . $limit
+    );
+    $stmt->execute([$userId]);
+    $rows = $stmt->fetchAll();
+
+    $notifications = [];
+    foreach ($rows as $row) {
+        $payload = json_decode((string)($row['payload_json'] ?? ''), true);
+        $notifications[] = [
+            'id' => (int)$row['notification_id'],
+            'notification_id' => (int)$row['notification_id'],
+            'type' => $row['type'],
+            'title' => $row['title'],
+            'body' => $row['body'],
+            'payload' => is_array($payload) ? $payload : [],
+            'read' => !empty($row['read_at']),
+            'read_at' => $row['read_at'],
+            'date' => $row['created_at'],
+        ];
+    }
+
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM user_notifications WHERE user_id = ? AND read_at IS NULL AND deleted_at IS NULL');
+    $stmt->execute([$userId]);
+
+    return [
+        'notifications' => $notifications,
+        'unread_count' => (int)$stmt->fetchColumn(),
+    ];
+}
+
+function mm_notification_mark_read(PDO $pdo, int $userId, array $input): array
+{
+    $ids = $input['ids'] ?? $input['notification_ids'] ?? [];
+    if (is_string($ids)) {
+        $decoded = json_decode($ids, true);
+        $ids = is_array($decoded) ? $decoded : [];
+    }
+    $ids = array_values(array_filter(array_map('intval', is_array($ids) ? $ids : []), static fn (int $id): bool => $id > 0));
+
+    if ($ids) {
+        $placeholders = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $pdo->prepare('UPDATE user_notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL AND notification_id IN (' . $placeholders . ')');
+        $stmt->execute(array_merge([$userId], $ids));
+    } else {
+        $stmt = $pdo->prepare('UPDATE user_notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL');
+        $stmt->execute([$userId]);
+    }
+
+    return ['marked' => $stmt->rowCount()];
 }
 
 function mm_fee_quote(PDO $pdo, string $network, string $direction, int $amountNgwee): array
@@ -780,10 +848,21 @@ function mm_transition(PDO $pdo, int $transactionId, string $toState, string $ac
 
     if (isset($messages[$toState])) {
         [$title, $body] = $messages[$toState];
-        $payload = ['transaction_id' => $transactionId, 'state' => $toState];
-        mm_notify($pdo, $customerId, 'transaction.' . $toState, $title, $body, $payload);
+        mm_notify($pdo, $customerId, 'transaction.' . $toState, $title, $body, [
+            'screen' => 'transactions',
+            'transaction_id' => $transactionId,
+            'request_id' => (int)($tx['request_id'] ?? 0),
+            'state' => $toState,
+            'role' => 'customer',
+        ]);
         if ($agentUserId) {
-            mm_notify($pdo, $agentUserId, 'transaction.' . $toState, $title, $body, $payload);
+            mm_notify($pdo, $agentUserId, 'transaction.' . $toState, $title, $body, [
+                'screen' => 'agent.dashboard',
+                'transaction_id' => $transactionId,
+                'request_id' => (int)($tx['request_id'] ?? 0),
+                'state' => $toState,
+                'role' => 'agent',
+            ]);
         }
     }
 

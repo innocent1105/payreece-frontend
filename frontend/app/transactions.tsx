@@ -1,5 +1,6 @@
 import { getToken } from '@/components/auth/auth';
 import { BASE_URL } from '@/constants/api';
+import { marketplaceActivity, marketplaceHistory } from '@/components/lib/marketplace';
 import NoTransactions from '@/components/no-transactions';
 import { ScreenHero } from '@/components/ui/screen-hero';
 import { GlassCard } from '@/components/ui/glass-card';
@@ -9,7 +10,7 @@ import axios from 'axios';
 import { formatDistanceToNow } from 'date-fns';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,6 +18,7 @@ export default function TransactionsScreen() {
   const t = useAppTheme();
   const insets = useSafeAreaInsets();
   const [txs, setTxs] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -38,8 +40,22 @@ export default function TransactionsScreen() {
     finally { setLoading(false); setRefreshing(false); }
   };
 
+  const loadHistory = async () => {
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const rows = await marketplaceHistory(100);
+      setHistory(rows.map(marketplaceActivity));
+    } catch {}
+  };
+
+  const allTxs = useMemo(
+    () => [...txs, ...history].sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime()),
+    [txs, history],
+  );
+
   useEffect(() => {
-    const timer = setTimeout(() => { void load(); }, 0);
+    const timer = setTimeout(() => { void load(); void loadHistory(); }, 0);
     return () => clearTimeout(timer);
   }, []);
 
@@ -50,16 +66,20 @@ export default function TransactionsScreen() {
         <GlassCard style={{ flex: 1, padding: 6 }}>
           {loading ? <ActivityIndicator color={t.tint} style={{ marginTop: 40 }} /> : (
             <FlatList
-              data={txs}
-              keyExtractor={(item, i) => String(item.id || i)}
-              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={t.tint} />}
+              data={allTxs}
+              keyExtractor={(item, i) => String(item.id || item.public_id || i)}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void Promise.all([load(), loadHistory()]); }} tintColor={t.tint} />}
               ListEmptyComponent={<NoTransactions onDepositPress={() => router.push('/deposit_funds')} />}
               contentContainerStyle={{ padding: 8, paddingBottom: insets.bottom + 20 }}
               renderItem={({ item, index }) => {
-                const incoming = item.type === 'deposit' || (item.type === 'transfer' && !item.from_me);
-                const title = item.type === 'deposit' ? 'Deposit' : item.from_me ? `Sent to ${item.other_sender_name || 'recipient'}` : `From ${item.other_sender_name || 'sender'}`;
+                const isMarketplace = item.type === 'marketplace';
+                const incoming = isMarketplace ? !item.from_me : item.type === 'deposit' || (item.type === 'transfer' && !item.from_me);
+                const title = isMarketplace ? item.title : item.type === 'deposit' ? 'Deposit' : item.from_me ? `Sent to ${item.other_sender_name || 'recipient'}` : `From ${item.other_sender_name || 'sender'}`;
+                const onPress = isMarketplace
+                  ? () => router.push({ pathname: '/marketplace/map', params: { transaction_id: String(item.transaction_id || ''), role: item.role } })
+                  : () => router.push({ pathname: '/transaction', params: item });
                 return (
-                  <Pressable onPress={() => router.push({ pathname: '/transaction', params: item })} style={[styles.row, index < txs.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border }]}>
+                  <Pressable onPress={onPress} style={[styles.row, index < allTxs.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.border }]}>
                     <View style={[styles.icon, { backgroundColor: incoming ? t.successSoft : t.accentSoftBg }]}><Feather name={incoming ? 'arrow-down-left' : 'arrow-up-right'} size={18} color={incoming ? t.success : t.tint} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.title, { color: t.text }]} numberOfLines={1}>{title}</Text>

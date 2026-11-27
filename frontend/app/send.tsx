@@ -16,7 +16,8 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 export default function SendScreen() {
   const t = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { id, username, phone_number, amount } = useLocalSearchParams<any>();
+  const { id, username, name, phone_number, avatar, amount } = useLocalSearchParams<any>();
+  const recipientName = String(username || name || 'Recipient');
   const [token, setToken] = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -31,10 +32,10 @@ export default function SendScreen() {
     setProcessing(true); setError('');
     try {
       const res = await axios.post(`${BASE_URL}/send_to_user.php`, {
-        sender_id: token, receiver_id: id, username, phone_number, amount, password, selectedNetwork: 'MTN'
+        sender_id: token, receiver_id: id, username: recipientName, phone_number, amount, password, selectedNetwork: 'MTN'
       }, { timeout: 10000 });
       if (res.data?.success) {
-        router.push({ pathname: '/successful_transfer', params: { amount, username, phone_number, reference: res.data.reference } });
+        router.push({ pathname: '/successful_transfer', params: { amount, username: recipientName, phone_number, avatar, reference: res.data.reference } });
       } else setError(res.data?.message || 'Transfer failed.');
     } catch { setError('Failed, please try again later.'); }
     finally { setProcessing(false); }
@@ -47,11 +48,11 @@ export default function SendScreen() {
         <View style={styles.body}>
           <Animated.View entering={FadeInDown.duration(380)}>
             {processing ? (
-              <TransactionProcessingCard amount={amount} receiver={username} mobileNumber={phone_number} />
+              <TransactionProcessingCard amount={amount} receiver={recipientName} mobileNumber={phone_number} />
             ) : (
               <GlassCard>
                 <Text style={[styles.section, { color: t.textSecondary }]}>Transfer details</Text>
-                {[['Recipient', username], ['Phone', phone_number], ['Amount', `K${amt.toFixed(2)}`], ['Fee (1.5%)', `K${fee.toFixed(2)}`]].map(([k, v]) => (
+                {[['Recipient', recipientName], ['Phone', phone_number], ['Amount', `K${amt.toFixed(2)}`], ['Fee (1.5%)', `K${fee.toFixed(2)}`]].map(([k, v]) => (
                   <View key={k as string} style={styles.row}><Text style={{ color: t.textSecondary }}>{k}</Text><Text style={{ color: t.text, fontWeight: '600' }}>{v as string}</Text></View>
                 ))}
                 <View style={[styles.row, styles.total, { borderTopColor: t.border }]}><Text style={{ color: t.text, fontWeight: '700' }}>Total</Text><Text style={{ color: t.text, fontWeight: '700', fontSize: 18 }}>K{total.toFixed(2)}</Text></View>
