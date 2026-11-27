@@ -10,8 +10,11 @@ $input = ipay_json_input();
 ipay_require_post();
 
 $amount = round((float)($input['amount'] ?? 0), 2);
-$phone  = trim((string)($input['phone'] ?? ''));
+$phone  = trim((string)($input['phone'] ?? $input['phone_number'] ?? ''));
 $pId    = trim((string)($input['p_id'] ?? $input['token'] ?? ''));
+if ($pId === '' && !empty($_SERVER['HTTP_AUTHORIZATION'])) {
+    $pId = trim(preg_replace('/^Bearer\s+/i', '', (string)$_SERVER['HTTP_AUTHORIZATION']));
+}
 
 if ($amount <= 0 || $phone === '' || $pId === '') {
     ipay_json(['success' => false, 'message' => 'Invalid deposit data'], 400);

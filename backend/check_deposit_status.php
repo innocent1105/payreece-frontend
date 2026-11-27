@@ -5,7 +5,8 @@ ipay_send_cors_headers();
 require_once __DIR__ . '/connection.php';
 require_once __DIR__ . '/lib_lenco.php';
 
-$reference = trim((string)($_GET['ref'] ?? ''));
+$input = ipay_json_input();
+$reference = trim((string)($_GET['ref'] ?? $_GET['reference'] ?? $input['reference'] ?? $input['ref'] ?? ''));
 
 if ($reference === '') {
     ipay_json(['success' => false, 'message' => 'Missing reference'], 400);

@@ -1,3 +1,4 @@
+import { getToken } from "@/components/auth/auth";
 import { BASE_URL } from "@/constants/api";
 import { AppButton } from "@/components/ui/app-button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -29,10 +30,11 @@ export default function DepositFunds() {
     pollRef.current = setInterval(async () => {
       attempts++;
       try {
-        const res = await axios.post(`${BASE_URL}/check_deposit_status.php`, { reference }, { timeout: 10000 });
+        const res = await axios.get(`${BASE_URL}/check_deposit_status.php`, { params: { ref: reference }, timeout: 10000 });
         if (res.data?.status === "successful" || res.data?.status === "success") {
           clearInterval(pollRef.current); setStatus("success");
         } else if (res.data?.status === "failed" || attempts > 40) {
+          console.log("Deposit polling failed after", attempts, "attempts");
           clearInterval(pollRef.current); setStatus(attempts > 40 ? "failed" : "failed"); setError("Deposit not confirmed. Please try again.");
         }
       } catch {}
@@ -44,10 +46,31 @@ export default function DepositFunds() {
     if (!amt || amt <= 0 || phone.length < 10) { setError("Enter a valid amount and phone number."); return; }
     setLoading(true); setError(""); setStatus("pending");
     try {
-      const res = await axios.post(`${BASE_URL}/deposit_funds.php`, { amount: amt, phone_number: phone }, { timeout: 15000 });
+      const token = await getToken();
+      if (!token) {
+        setStatus("failed");
+        setError("Please sign in again.");
+        return;
+      }
+      const res = await axios.post(`${BASE_URL}/deposit_funds.php`, {
+        amount: amt,
+        phone,
+        phone_number: phone,
+        p_id: token,
+        token,
+      }, { timeout: 15000 });
       if (res.data?.success && res.data?.reference) startPolling(res.data.reference);
-      else { setStatus("failed"); setError(res.data?.message || "Could not initiate deposit."); }
-    } catch { setStatus("failed"); setError("Network error. Please try again."); }
+      else {
+        setStatus("failed");
+        setError(res.data?.message || "Could not initiate deposit.");
+        console.log("Deposit initiation failed:", res.data);
+      }
+    } catch (err: any) {
+      const data = err?.response?.data;
+      setStatus("failed");
+      setError(data?.message || err?.message || "Network error. Please try again.");
+      console.log("Deposit initiation error:", data ?? err);
+    }
     finally { setLoading(false); }
   };
 
