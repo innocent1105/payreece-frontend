@@ -5,7 +5,7 @@
 $apiUrl = "https://bulksms.smartforelending.com/api/bulk/v1/sms";
 
 // Replace with your actual API key
-$apiKey = "sk_live_2c2e47521ddc3a52971885e00759f84f35c7a889";
+$apiKey = "s4_live_2c2e47521ddc3a52971885e00759f84f35c7a889";
 
 // API response
 $response = null;
