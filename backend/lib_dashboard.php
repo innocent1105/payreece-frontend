@@ -30,7 +30,8 @@ function ipay_transaction_payload(PDO $pdo, string $token, int $limit = 0): arra
 
     $sql = "
         SELECT t.t_id, t.t_type, t.sender_id, t.receiver_id, t.amount, t.status, t.reference, t.created_at,
-               u.fullname AS other_sender_name, u.phone_number AS other_sender_number
+               COALESCE(NULLIF(u.fullname, ''), NULLIF(u.username, ''), NULLIF(u.phone_number, ''), '') AS other_sender_name,
+               u.phone_number AS other_sender_number
         FROM transactions t
         LEFT JOIN users u
           ON u.user_id = CASE WHEN t.sender_id = ? THEN t.receiver_id ELSE t.sender_id END

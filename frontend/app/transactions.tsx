@@ -63,7 +63,7 @@ export default function TransactionsScreen() {
     <View style={{ flex: 1, backgroundColor: t.background }}>
       <ScreenHero title="Transactions" onBack={() => router.back()} compact />
       <View style={styles.body}>
-        <GlassCard style={{ flex: 1, padding: 6 }}>
+        <GlassCard style={{ flex: 1, padding: 0 }}>
           {loading ? <ActivityIndicator color={t.tint} style={{ marginTop: 40 }} /> : (
             <FlatList
               data={allTxs}
@@ -73,8 +73,10 @@ export default function TransactionsScreen() {
               contentContainerStyle={{ padding: 8, paddingBottom: insets.bottom + 20 }}
               renderItem={({ item, index }) => {
                 const isMarketplace = item.type === 'marketplace';
-                const incoming = isMarketplace ? !item.from_me : item.type === 'deposit' || (item.type === 'transfer' && !item.from_me);
-                const title = isMarketplace ? item.title : item.type === 'deposit' ? 'Deposit' : item.from_me ? `Sent to ${item.other_sender_name || 'recipient'}` : `From ${item.other_sender_name || 'sender'}`;
+                const isTransfer = item.type === 'transfer' || item.type === 'sent' || item.type === 'received';
+                const counterparty = item.other_sender_name || item.other_sender_number;
+                const incoming = isMarketplace ? !item.from_me : item.type === 'deposit' || (isTransfer && !item.from_me);
+                const title = isMarketplace ? item.title : item.type === 'deposit' ? 'Deposit' : isTransfer ? (item.from_me ? `Sent to ${counterparty || 'recipient'}` : `From ${counterparty || 'sender'}`) : 'Transaction';
                 const onPress = isMarketplace
                   ? () => router.push({ pathname: '/marketplace/map', params: { transaction_id: String(item.transaction_id || ''), role: item.role } })
                   : () => router.push({ pathname: '/transaction', params: item });
@@ -98,7 +100,7 @@ export default function TransactionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, padding: 20, marginTop: -24 },
+  body: { flex: 1, padding: 0, marginTop: 0 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 8 },
   icon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   title: { fontSize: 15, fontWeight: '600', marginBottom: 2 },

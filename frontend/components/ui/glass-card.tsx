@@ -14,14 +14,14 @@ type Props = ViewProps & {
   delay?: number;
 };
 
-export function GlassCard({ children, style, intensity = 40, animated = false, delay = 0 }: Props) {
+export function GlassCard({ children, style, intensity = 50, animated = false, delay = 0 }: Props) {
   const t = useAppTheme();
   const flat = StyleSheet.flatten(style) || {};
   const radius = (flat.borderRadius as number) ?? Radius.lg;
   const content = (
     <View style={[styles.wrap, { borderRadius: radius, borderColor: t.glassBorder, shadowColor: t.cardShadow }, style]}>
       {Platform.OS === 'ios' ? (
-        <BlurView intensity={intensity} tint={t.background === '#000000' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+        <BlurView intensity={intensity} tint={t.background === '#050505' ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
       ) : null}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: t.glass }]} />
       <View style={[styles.highlight, { borderColor: t.glassHighlight, borderRadius: radius }]} pointerEvents="none" />
@@ -51,6 +51,6 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   inner: {
-    padding: 16,
+    padding: 18,
   },
 });

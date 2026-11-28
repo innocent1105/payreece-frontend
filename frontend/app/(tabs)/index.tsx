@@ -273,8 +273,10 @@ export default function HomeScreen() {
               </View>
               {allActivity.length === 0 ? <NoTransactions onDepositPress={() => router.push('/deposit_funds')} /> : allActivity.map((tx, i) => {
                 const isMarketplace = tx.type === 'marketplace';
-                const incoming = isMarketplace ? !tx.from_me : tx.type === 'deposit' || (tx.type === 'transfer' && !tx.from_me);
-                const title = isMarketplace ? tx.title : tx.type === 'deposit' ? 'Deposit' : tx.type === 'transfer' ? (tx.from_me ? `Sent to ${tx.other_sender_name || 'recipient'}` : `From ${tx.other_sender_name || 'sender'}`) : 'Transaction';
+                const isTransfer = tx.type === 'transfer' || tx.type === 'sent' || tx.type === 'received';
+                const counterparty = tx.other_sender_name || tx.other_sender_number;
+                const incoming = isMarketplace ? !tx.from_me : tx.type === 'deposit' || (isTransfer && !tx.from_me);
+                const title = isMarketplace ? tx.title : tx.type === 'deposit' ? 'Deposit' : isTransfer ? (tx.from_me ? `Sent to ${counterparty || 'recipient'}` : `From ${counterparty || 'sender'}`) : 'Transaction';
                 const onPress = isMarketplace
                   ? () => router.push({ pathname: '/marketplace/map', params: { transaction_id: String(tx.transaction_id || ''), role: tx.role } })
                   : () => router.push({ pathname: '/transaction', params: tx });

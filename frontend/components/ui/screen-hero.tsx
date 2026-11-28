@@ -38,10 +38,10 @@ export function ScreenHero({ title, subtitle, onBack, right, children, compact }
 
 const styles = StyleSheet.create({
   hero: { paddingHorizontal: 20, paddingBottom: 36, overflow: 'hidden' },
-  glowA: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,255,255,0.08)', top: -60, right: -40 },
-  glowB: { position: 'absolute', width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(10,132,255,0.18)', bottom: -40, left: -20 },
+  glowA: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255, 255, 255, 0.03)', top: -60, right: -40 },
+  glowB: { position: 'absolute', width: 160, height: 160, borderRadius: 80, backgroundColor: 'rgba(10, 132, 255, 0.07)', bottom: -40, left: -20 },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.14)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
+  iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255, 255, 255, 0.06)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
   iconBtnPlaceholder: { width: 38, height: 38 },
   right: { minWidth: 38, alignItems: 'flex-end' },
   title: { color: '#fff', fontSize: 17, fontWeight: '600', letterSpacing: -0.2 },
